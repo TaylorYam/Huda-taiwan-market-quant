@@ -60,4 +60,4 @@ jobs:
         run: ruff format --check src tests
 
       - name: Run tests
-        run: pytest -q
+        run: python -m pytest -q

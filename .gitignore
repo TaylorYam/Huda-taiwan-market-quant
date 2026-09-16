@@ -8,6 +8,7 @@ secrets.*
 credentials.*
 
 # Python environments, caches, and build output
+node_modules/
 .venv/
 venv/
 __pycache__/
@@ -21,6 +22,7 @@ dist/
 .coverage
 coverage.xml
 htmlcov/
+coverage/
 
 # Local market data and generated runtime state
 /data/

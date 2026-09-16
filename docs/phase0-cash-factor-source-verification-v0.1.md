@@ -4,7 +4,7 @@
 
 ## 結論
 
-本次可重現查到：免費 BFI82U 在頁面所列起日 2004-04-07 有日報；2004-04-06 日報無符合條件的資料。FMTQIK 同時顯示 2004-04-06 是交易日，故 BFI82U 前一日空白是它尚未提供該日資料，不能解讀成休市。2004-04-07 的免費 BFI82U 註記不含鉅額交易，但同日 FMTQIK 註記含鉅額；2022-10-24 與 2026-09-14 的 BFI82U 則註記含鉅額。欄位分類亦從早期「外資」改為現行拆列「外資及陸資（不含外資自營商）」與「外資自營商」。
+本次可重現查到：免費 BFI82U 在頁面所列起日 2004-04-07 有日報；2004-04-06 日報無符合條件的資料。FMTQIK 同時顯示 2004-04-06 是交易日，故 BFI82U 前一日空白是它尚未提供該日資料，不能解讀成休市。2004-04-07 的免費 BFI82U 註記不含鉅額交易，但同日 FMTQIK 註記含鉅額。2022-10-24 與 2026-09-14 的 BFI82U 報表註記含鉅額；本次未保留這兩日對應的 FMTQIK 月報列與註記，因此不把近年同日口徑比對視為完成。欄位分類亦從早期「外資」改為現行拆列「外資及陸資（不含外資自營商）」與「外資自營商」。
 
 E-Shop 說明列出每日 14:50（不含綜合帳戶及鉅額）及 19:40（含綜合帳戶及鉅額）兩版，也列出 BFI82U 與 BFIBGU 兩個檔案碼，但未將任一檔案碼對應到產製時間。公開 CSV 樣本在本次執行環境中未能取得可讀位元組，因此無法檢查樣本內容或用其建立映射。不得只憑檔名、鉅額註記或樣本連結順序猜測映射。
 
@@ -14,12 +14,12 @@ E-Shop 說明列出每日 14:50（不含綜合帳戶及鉅額）及 19:40（含�
 
 官方查詢頁標示「本資訊自民國 93 年 4 月 7 日起提供」，並提供「列印 / HTML」及「CSV 下載」。此為官方標示起日；本次只驗證列出的樣本日期，不代表 2004-04-07 之後每日均有資料或無缺漏。
 
-| 交易日 | 可重現 HTML 查詢 URL | 本次觀察 |
-|---|---|---|
-| 2004-04-06 | [BFI82U 2004-04-06](https://www.twse.com.tw/fund/BFI82U?response=html&dayDate=20040406&weekDate=20040405&monthDate=20040406&type=day) | 查詢回覆「很抱歉，沒有符合條件的資料!」。FMTQIK 同日有成交列，故這是 BFI82U 起始日前無資料，不是非交易日。 |
-| 2004-04-07 | [BFI82U 2004-04-07](https://www.twse.com.tw/fund/BFI82U?response=html&dayDate=20040407&weekDate=20040405&monthDate=20040407&type=day) | 報表存在，單位為元；列名是早期的「自營商、投信、外資、合計」。 |
-| 2022-10-24 | [BFI82U 2022-10-24](https://www.twse.com.tw/fund/BFI82U?response=html&dayDate=20221024&weekDate=20221017&monthDate=20221024&type=day) | 報表存在，單位為元；使用現行拆分分類。 |
-| 2026-09-14 | [BFI82U 2026-09-14](https://www.twse.com.tw/fund/BFI82U?response=html&dayDate=20260914&weekDate=20260914&monthDate=20260914&type=day) | 報表存在，單位為元；使用現行拆分分類。 |
+| 交易日 | HTML 查詢 URL | CSV 查詢 URL | 本次觀察 |
+|---|---|---|---|
+| 2004-04-06 | [BFI82U 2004-04-06 HTML](https://www.twse.com.tw/fund/BFI82U?response=html&dayDate=20040406&weekDate=20040405&monthDate=20040406&type=day) | [BFI82U 2004-04-06 CSV](https://www.twse.com.tw/fund/BFI82U?response=csv&dayDate=20040406&weekDate=20040405&monthDate=20040406&type=day) | 查詢回覆「很抱歉，沒有符合條件的資料!」。FMTQIK 同日有成交列，故這是 BFI82U 起始日前無資料，不是非交易日。 |
+| 2004-04-07 | [BFI82U 2004-04-07 HTML](https://www.twse.com.tw/fund/BFI82U?response=html&dayDate=20040407&weekDate=20040405&monthDate=20040407&type=day) | [BFI82U 2004-04-07 CSV](https://www.twse.com.tw/fund/BFI82U?response=csv&dayDate=20040407&weekDate=20040405&monthDate=20040407&type=day) | 報表存在，單位為元；列名是早期的「自營商、投信、外資、合計」。 |
+| 2022-10-24 | [BFI82U 2022-10-24 HTML](https://www.twse.com.tw/fund/BFI82U?response=html&dayDate=20221024&weekDate=20221017&monthDate=20221024&type=day) | [BFI82U 2022-10-24 CSV](https://www.twse.com.tw/fund/BFI82U?response=csv&dayDate=20221024&weekDate=20221017&monthDate=20221024&type=day) | 報表存在，單位為元；使用現行拆分分類。FMTQIK 對應月報列於下節，但本次沒有保留該日原始列，對照未完成。 |
+| 2026-09-14 | [BFI82U 2026-09-14 HTML](https://www.twse.com.tw/fund/BFI82U?response=html&dayDate=20260914&weekDate=20260914&monthDate=20260914&type=day) | [BFI82U 2026-09-14 CSV](https://www.twse.com.tw/fund/BFI82U?response=csv&dayDate=20260914&weekDate=20260914&monthDate=20260914&type=day) | 報表存在，單位為元；使用現行拆分分類。FMTQIK 對應月報列於下節，但本次沒有保留該日原始列，對照未完成。 |
 
 2004-04-07 HTML 欄名為 `單位名稱`、`買進金額`、`賣出金額`、`買賣差額`；頁面單位為「元」。原始列如下：
 
@@ -53,9 +53,22 @@ HTML 欄名為 `日期`、`成交股數`、`成交金額`、`成交筆數`、`�
 
 2004-04-06 的成交列證實該日 TWSE 集中市場有交易，並協助區分 BFI82U 前一日的無資料回覆與休市。1990-01-03 的查詢仍回傳 79 年 1 月報，第一個可見列是官方頁所列起日 1990-01-04；不能將起日前沒有列解讀為 1990-01-04 之後資料完整。
 
+下列近年同日比較 URL 可供重現查詢；在補錄日期列、欄值與報表註記前，僅保留為待核對來源，不據此下同口徑結論：
+
+| 交易日 | FMTQIK HTML 月報 | FMTQIK CSV 月報 | 比對狀態 |
+|---|---|---|---|
+| 2022-10-24 | [FMTQIK 2022-10 月報](https://www.twse.com.tw/exchangeReport/FMTQIK?date=20221024&response=html) | [FMTQIK 2022-10 CSV](https://www.twse.com.tw/exchangeReport/FMTQIK?date=20221024&response=csv) | 尚未保存該日原始列與報表註記；買賣範圍比對未完成。 |
+| 2026-09-14 | [FMTQIK 2026-09 月報](https://www.twse.com.tw/exchangeReport/FMTQIK?date=20260914&response=html) | [FMTQIK 2026-09 CSV](https://www.twse.com.tw/exchangeReport/FMTQIK?date=20260914&response=csv) | 官方 OpenAPI 可重現取得該日列（見下表），但本次未保存月報註記；範圍比對未完成。 |
+
+TWSE 官方 [FMTQIK OpenAPI](https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK) 回傳的 2026-09-14 原始列如下。這個端點欄位沒有附報表註記；`TradeValue` 的值也未在此 JSON 列中單獨標出計價單位，因此不替代上方月報 HTML／CSV 的核對。
+
+| Date | TradeVolume | TradeValue | Transaction | TAIEX | Change |
+|---|---:|---:|---:|---:|---:|
+| 1150914 | 8,822,022,033 | 665,316,266,033 | 4,064,716 | 45,862.52 | -322.33 |
+
 非交易日檢查使用 [FMTQIK 2026-09-13 月報](https://www.twse.com.tw/exchangeReport/FMTQIK?date=20260913&response=html)。2026-09-13 為星期日，月報沒有 115/09/13 列，月報中在 115/09/11 後接 115/09/14。這與 2004-04-06 是交易日但 BFI82U 尚未提供資料的情況不同。
 
-FMTQIK 報表註記：當日統計含大盤、零股、盤後定價及鉅額，不含拍賣、標購；外幣成交值按 TWSE 當日下午 3:30 公告匯率換算後加入成交金額。因此，2004-04-07 的 BFI82U（明載不含鉅額）與同日 FMTQIK（明載含鉅額）至少在該項交易範圍不一致；2022-10-24、2026-09-14 免費 BFI82U 報表註記則與 FMTQIK 在鉅額納入上相同。這些註記相同不代表其餘帳戶定義或全段歷史都已核對相同。
+FMTQIK 報表註記：當日統計含大盤、零股、盤後定價及鉅額，不含拍賣、標購；外幣成交值按 TWSE 當日下午 3:30 公告匯率換算後加入成交金額。因此，2004-04-07 的 BFI82U（明載不含鉅額）與同日 FMTQIK（明載含鉅額）至少在該項交易範圍不一致。2022-10-24、2026-09-14 免費 BFI82U 報表註記含鉅額，但本次未保存對應 FMTQIK 月報列及註記，不能據此宣稱同日口徑相同。即使註記相同，也不代表其餘帳戶定義或全段歷史都已核對相同。
 
 ## E-Shop 檔案碼、時間版次與樣本
 
@@ -70,7 +83,7 @@ TWSE Data E-Shop 商品頁提供以下明文資料：
 
 本次嘗試透過官方商品頁的 BFI82U 與 BFIBGU CSV 範例連結讀取內容。Web 閱讀器拒絕 `application/octet-stream`；瀏覽器直接開啟 CSV 被用戶端阻擋；本機 PowerShell／curl 的 Schannel 握手未完成，Python 亦回報伺服器憑證缺少 Subject Key Identifier。這是本次環境無法取得可讀樣本內容的限制，不代表官方檔案對所有使用者或環境都不可下載。故本次沒有比較兩份 CSV 的資料列，也沒有取得任何可用來連結檔案碼與 14:50／19:40 的樣本證據。
 
-免費 BFI82U 與 FMTQIK 查詢頁均提供 CSV 下載按鈕；但本次可檢視並記錄的是 HTML 報表，未取得可讀 CSV 位元組。因此上文所列欄名是 HTML 報表欄名，不宣稱已比較 HTML 與 CSV 欄名、編碼或數值一致性。官方提供 CSV 選項本身不代表批次自動化權利已確認。
+免費 BFI82U 與 FMTQIK 查詢頁均提供 CSV 下載按鈕；上表已列出依官方端點與查詢參數組成的直接 CSV URL，方便人工重試。本次環境未取得可讀 CSV 位元組；直接 CSV URL 透過 Web 閱讀器查詢時回覆「URL is not safe to open」，該錯誤是閱讀器的安全限制，不是 TWSE 伺服器回覆，也不能據此判定 CSV 連結失效。因此上文所列欄名是 HTML 報表欄名，不宣稱已比較 HTML 與 CSV 欄名、編碼或數值一致性。官方提供 CSV 選項本身不代表批次自動化權利已確認。
 
 ## 因子實作判定與待解缺口
 
@@ -79,7 +92,7 @@ TWSE Data E-Shop 商品頁提供以下明文資料：
 1. 固定分子要用免費報表、E-Shop BFI82U 或 E-Shop BFIBGU；若用 E-Shop，須取得可核對的產品檔案定義及時間版次映射。
 2. 定義 14:50／19:40 快照、綜合帳戶及鉅額交易納入規則，並確定分子和 FMTQIK 分母按同一交易類型對齊。
 3. 定義歷史分類轉換：2004 年的「外資」與現行外資及陸資拆列，以及因外資自營商已併入自營商金額而不計入合計的規則，如何映射到模型的「外資」分子。
-4. 以合法可取得的原始 CSV／TEXT 樣本核實 HTML 對照、檔案欄位、編碼、起始附近日期、修訂與缺值。官方列出的供應起日不等於每日無缺，也不等於已驗證序列完整。
+4. 以合法可取得的原始 CSV／TEXT 樣本核實 HTML 對照、檔案欄位、編碼、起始附近日期、修訂與缺值；並補錄 2022-10-24、2026-09-14 的 FMTQIK 月報原始列及註記，完成近年匹配日期的交易範圍比較。官方列出的供應起日不等於每日無缺，也不等於已驗證序列完整。
 5. 另行確認自動化收集、保存與展示的權利範圍；本次未購買或訂閱資料，權利狀態未知。
 
 若先做即時資料原型，仍須標記來源為指定日期的「免費 BFI82U HTML 報表觀察值」，保留報表列名、單位、資料日期、抓取時間及交易範圍註記；不可把該原型描述成已驗證的歷史因子序列。
@@ -87,10 +100,14 @@ TWSE Data E-Shop 商品頁提供以下明文資料：
 ## 官方來源與可重現查詢
 
 - [TWSE 免費 BFI82U 查詢頁](https://www.twse.com.tw/zh/trading/foreign/bfi82u.html)（頁面起始日、日期選擇器、HTML／CSV 下載入口）
-- [BFI82U 2004-04-06](https://www.twse.com.tw/fund/BFI82U?response=html&dayDate=20040406&weekDate=20040405&monthDate=20040406&type=day)；[BFI82U 2004-04-07](https://www.twse.com.tw/fund/BFI82U?response=html&dayDate=20040407&weekDate=20040405&monthDate=20040407&type=day)
-- [BFI82U 2022-10-24](https://www.twse.com.tw/fund/BFI82U?response=html&dayDate=20221024&weekDate=20221017&monthDate=20221024&type=day)；[BFI82U 2026-09-14](https://www.twse.com.tw/fund/BFI82U?response=html&dayDate=20260914&weekDate=20260914&monthDate=20260914&type=day)
+- [BFI82U 2004-04-06 HTML](https://www.twse.com.tw/fund/BFI82U?response=html&dayDate=20040406&weekDate=20040405&monthDate=20040406&type=day)；[CSV](https://www.twse.com.tw/fund/BFI82U?response=csv&dayDate=20040406&weekDate=20040405&monthDate=20040406&type=day)
+- [BFI82U 2004-04-07 HTML](https://www.twse.com.tw/fund/BFI82U?response=html&dayDate=20040407&weekDate=20040405&monthDate=20040407&type=day)；[CSV](https://www.twse.com.tw/fund/BFI82U?response=csv&dayDate=20040407&weekDate=20040405&monthDate=20040407&type=day)
+- [BFI82U 2022-10-24 HTML](https://www.twse.com.tw/fund/BFI82U?response=html&dayDate=20221024&weekDate=20221017&monthDate=20221024&type=day)；[CSV](https://www.twse.com.tw/fund/BFI82U?response=csv&dayDate=20221024&weekDate=20221017&monthDate=20221024&type=day)
+- [BFI82U 2026-09-14 HTML](https://www.twse.com.tw/fund/BFI82U?response=html&dayDate=20260914&weekDate=20260914&monthDate=20260914&type=day)；[CSV](https://www.twse.com.tw/fund/BFI82U?response=csv&dayDate=20260914&weekDate=20260914&monthDate=20260914&type=day)
 - [TWSE Data E-Shop 三大法人買賣金額統計表商品頁](https://eshop.twse.com.tw/zh/product/detail/d31c1b9570ae47058ec83a0bb1ffa419)（起始日、檔案碼、時間版次、格式及官方樣本連結）
 - [TWSE FMTQIK 查詢頁](https://www.twse.com.tw/zh/trading/historical/fmtqik.html)（頁面起始日、日期選擇器、HTML／CSV 下載入口）
 - [FMTQIK 1990-01-04](https://www.twse.com.tw/exchangeReport/FMTQIK?date=19900104&response=html)；[FMTQIK 前一日參數 1990-01-03](https://www.twse.com.tw/exchangeReport/FMTQIK?date=19900103&response=html)
 - [FMTQIK 2004-04-06](https://www.twse.com.tw/exchangeReport/FMTQIK?date=20040406&response=html)；[FMTQIK 2004-04-07](https://www.twse.com.tw/exchangeReport/FMTQIK?date=20040407&response=html)
+- [FMTQIK 2022-10-24 HTML 月報](https://www.twse.com.tw/exchangeReport/FMTQIK?date=20221024&response=html)；[CSV](https://www.twse.com.tw/exchangeReport/FMTQIK?date=20221024&response=csv)
+- [FMTQIK 2026-09-14 HTML 月報](https://www.twse.com.tw/exchangeReport/FMTQIK?date=20260914&response=html)；[CSV](https://www.twse.com.tw/exchangeReport/FMTQIK?date=20260914&response=csv)；[官方 OpenAPI 回應](https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK)
 - [FMTQIK 非交易日測試 2026-09-13](https://www.twse.com.tw/exchangeReport/FMTQIK?date=20260913&response=html)

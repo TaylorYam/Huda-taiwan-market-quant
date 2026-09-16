@@ -1,35 +1,160 @@
 # Architecture Overview
 
-Keep this document aligned with the current system. Describe the important boundaries and reasons behind them; link to code for details that are easy to inspect there.
-
 ## Purpose and scope
 
-Describe the problem this project solves, its users, and what is outside its scope.
+本系統用來每日自動整合台灣現貨、期貨、選擇權與波動風險資料，產生一個可解釋的台指大盤操作方向。
+
+核心輸出：
+
+- Market Score（0–100）
+- 強多／偏多／中性／偏空／強空
+- 各因子分數
+- 簡短的判斷理由
+
+第一版不以預測明日精確漲跌幅為目標，而是判斷目前市場 Regime。
 
 ## System context
 
-List the main external systems, users, and data entering or leaving the project.
+主要使用者：
+
+- 主管：每天查看目前台指大盤操作方向
+- 專案維護者：維護資料抓取、評分邏輯、回測與網站
+
+主要外部資料來源：
+
+- TWSE：TAIEX、三大法人、融資融券等
+- TAIFEX：台指期行情、法人期貨部位、Put/Call Ratio、選擇權 OI、Taiwan VIX 等
 
 ## Components and boundaries
 
-Describe the major components, their responsibilities, and how they communicate. Add a diagram when it makes the boundaries easier to understand.
+預計架構：
+
+```text
+TWSE / TAIFEX
+     ↓
+Data Collectors
+     ↓
+Raw / Normalized Data
+     ↓
+Factor Engine
+     ↓
+Scoring Engine
+     ↓
+Market Direction Result
+     ↓
+Web Dashboard
+```
+
+### Data Collectors
+
+負責：
+
+- 每日從官方免費來源抓取資料
+- 處理 TWSE 與 TAIFEX 不同資料格式
+- 做基本欄位驗證與日期一致性檢查
+
+設計上應把 TWSE 與 TAIFEX client 分開，避免某一來源格式異動時影響全部資料流程。
+
+### Factor Engine
+
+負責把原始資料轉成 v0.1 的 8 個核心因子：
+
+1. TAIEX vs MA20 / MA60
+2. 20 日動能
+3. 外資 5 日買賣超
+4. 外資台指期淨多空部位
+5. 外資期貨淨部位 5 日變化
+6. 期現貨 Basis
+7. OI Put/Call Ratio
+8. Taiwan VIX
+
+### Scoring Engine
+
+負責：
+
+- 將各因子統一轉為 0–100 分
+- 套用 v0.1 權重
+- 計算 Market Score
+- 將 Market Score 映射成操作方向
+
+詳細規格見 `docs/factor-model-v0.1.md`。
+
+### Backtest Engine
+
+下一階段建立，用來驗證：
+
+- 高分是否對未來 5 / 10 / 20 日報酬有辨識力
+- 權重是否需要調整
+- PCR / Basis 等因子是否應保留
+- 操作門檻是否合理
+
+### Web Dashboard
+
+網站第一版重點是「先顯示結論，再顯示原因」。
+
+至少顯示：
+
+- 今日 Market Score
+- 操作方向
+- 分類因子分數
+- 8 個核心原始值
+- 最近更新時間
 
 ## Data and state
 
-Describe important data entities, persistence, ownership, retention, and any runtime data that must remain local or generated.
+預計保存兩層資料：
+
+1. **Raw data**：保留每日官方來源資料的必要欄位
+2. **Derived data**：Factor Score、Market Score 與操作方向
+
+歷史資料需可供回測重算，避免只保存最新一天結果。
+
+生成的 runtime cache、credentials 與 populated `.env` 不應提交到 Git。
 
 ## Runtime and deployment
 
-Record the supported environments, deployment shape, operational dependencies, and how configuration is supplied. Keep credentials out of this document.
+預計：
+
+- Python 作為資料抓取與量化計算核心
+- GitHub Actions 每日台股收盤後自動執行
+- 簡易 Web Dashboard 自動讀取最新計算結果
+
+第一版目標是不需要使用者每天手動更新資料，也不要求本機電腦持續開機。
 
 ## Quality attributes and constraints
 
-List the requirements that shape design choices, such as security, availability, performance, privacy, compatibility, and cost.
+### Cost
+
+- 第一版優先使用免費官方資料
+- 無必要不導入付費 API
+
+### Explainability
+
+- 每一個 Market Score 都應能回溯到因子與原始資料
+- 避免第一版直接採用不可解釋的機器學習模型
+
+### Reliability
+
+- 每日資料必須有日期與完整性檢查
+- 若某一必要資料源抓取失敗，系統不應默默產生錯誤分數
+- 網站需顯示最新成功更新時間
+
+### Maintainability
+
+- TWSE / TAIFEX 資料存取層與 Factor 邏輯分離
+- 評分權重與門檻應集中設定，方便回測後調整
 
 ## Important decisions
 
-Link to accepted architecture decision records under `docs/adr/`.
+目前重要決策：
+
+- v0.1 採 8 因子可解釋規則模型
+- 第一版優先使用 TWSE + TAIFEX 官方免費來源
+- 權重與門檻皆視為待回測的初始假設
+- 第一版不以機器學習預測明日漲跌為主要方向
+
+後續若這些決策成為長期架構基礎，可另外建立 ADR。
 
 ## Updating this document
 
-Update this overview when a change alters system boundaries, data flow, deployment, or an important constraint. Record durable choices in an ADR and link them here.
+當資料流、部署方式、核心模型邊界或重要限制發生變更時，應同步更新本文件。

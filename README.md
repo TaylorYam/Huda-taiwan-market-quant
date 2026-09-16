@@ -1,39 +1,108 @@
-# AI-Assisted Project Template
+# Huda Taiwan Market Quant
 
-A GitHub-first starting point for projects built by people and AI coding agents. It provides a lightweight contribution workflow, issue and pull request forms, a starter CI check, and guidance for keeping credentials and local runtime data out of Git.
+台指大盤量化方向判斷系統。
 
-## Start a project from this template
+## 專案目標
 
-1. On GitHub, open this repository and select **Use this template → Create a new repository**. Choose the new repository's owner, name, visibility, and other settings.
-2. Clone the new repository and open it in your editor or coding agent.
-3. Create a **Project bootstrap** issue describing the purpose, users, chosen stack, and first deliverable.
-4. Ask the coding agent to read `AGENTS.md`, this README, `.github/`, and `docs/`; inspect the repository; then propose project-specific changes before editing.
-5. Tailor `.gitignore`, `.env.example`, `docs/architecture.md`, and `.github/workflows/ci.yml` to the project. Add tests and stack-specific quality checks before feature work.
-6. Review and merge the bootstrap pull request, then begin feature work through issues and pull requests.
+本專案的核心不是堆疊大量指標，而是每天自動回答一個問題：
 
-If GitHub does not show **Use this template**, an owner can enable it in **Settings → General → Template repository**.
+> **目前台指大盤的操作方向是什麼？**
+
+系統預計每日自動更新資料、計算量化分數，最後輸出：
+
+- 強多
+- 偏多
+- 中性／觀望
+- 偏空
+- 強空
+
+第一版網站應讓主管快速看到：
+
+- 今日台指方向
+- Market Score（0–100）
+- 各類因子分數
+- 簡短的判斷理由
+
+範例：
+
+```text
+台指大盤：偏多
+Market Score：72 / 100
+
+技術趨勢：偏多
+現貨籌碼：偏多
+期貨籌碼：偏多
+選擇權：中性
+市場風險：正常
+
+操作方向：維持偏多操作。
+```
+
+## 設計原則
+
+1. **自動化優先**：每日自動抓資料，不依賴人工下載 Excel 或手動輸入。
+2. **免費資料優先**：第一版盡量只使用官方免費資料，不購買付費 API。
+3. **官方來源優先**：主要來源以 TWSE（臺灣證券交易所）與 TAIFEX（臺灣期貨交易所）為主。
+4. **模型可解釋**：主管能看懂為什麼今天是偏多或偏空。
+5. **先做規則模型，再回測**：v0.1 的權重與門檻是初始假設，之後必須用歷史資料驗證並調整。
+6. **不追求預測明日漲跌**：模型主要判斷目前市場 Regime／操作方向，而不是預測明天精確漲跌幅。
+
+## 自動化流程
+
+```text
+官方免費資料
+    ↓
+Python 每日抓取
+    ↓
+資料清理與儲存
+    ↓
+計算 Factor
+    ↓
+計算 0–100 分
+    ↓
+產生台指操作方向
+    ↓
+網站自動更新
+```
+
+預計之後使用 GitHub Actions 在台股收盤後自動執行。
+
+## v0.1 核心模型
+
+第一版先使用 8 個核心因子：
+
+| 類別 | 指標 | 權重 |
+|---|---|---:|
+| 技術 | TAIEX vs MA20 / MA60 | 20% |
+| 技術 | 20 日動能 | 10% |
+| 現貨籌碼 | 外資 5 日買賣超 | 15% |
+| 期貨 | 外資台指期淨多空部位 | 15% |
+| 期貨 | 外資期貨淨部位 5 日變化 | 10% |
+| 期貨 | 期現貨價差 Basis | 5% |
+| 選擇權 | OI Put/Call Ratio | 10% |
+| 風險 | Taiwan VIX | 15% |
+|  | **合計** | **100%** |
+
+詳細定義與初始評分規則請見 [`docs/factor-model-v0.1.md`](docs/factor-model-v0.1.md)。
+
+## 目前階段
+
+- [x] 定義主管需求與系統目標
+- [x] 確認第一版以免費官方資料為主
+- [x] 定義 Market Direction Model v0.1
+- [x] 定義 8 個核心因子與初始權重
+- [x] 定義 Factor Score 0–100 的基本方式
+- [ ] 驗證每個 TWSE / TAIFEX 實際下載端點與欄位
+- [ ] 建立資料抓取模組
+- [ ] 建立歷史資料庫
+- [ ] 建立 Factor 計算
+- [ ] 建立回測框架
+- [ ] 回測與調整 v0.1 權重
+- [ ] 建立網站 Dashboard
+- [ ] 建立 GitHub Actions 每日自動更新
 
 ## Contribution flow
 
-For planned changes, use:
+本專案沿用 GitHub-first 流程：
 
-`Issue → branch or worktree → plan → implementation → validation → commit and push → pull request → review and CI → merge`
-
-Keep `main` as the stable integration branch. Make routine changes on a task branch and merge them through a reviewed pull request. Small changes still follow the same branch and review path; the amount of planning and testing should match their scope.
-
-Use the issue templates for tasks, bugs, and architecture decision proposals. Link the issue from the pull request so the intent and implementation stay connected.
-
-## Repository guide
-
-- `AGENTS.md` — instructions for AI agents and human contributors.
-- `.github/ISSUE_TEMPLATE/` — task, bug, and architecture decision forms.
-- `.github/pull_request_template.md` — review checklist and validation record.
-- `.github/workflows/ci.yml` — starter whitespace check; add the project's formatter, tests, type checks, and build here.
-- `.gitignore` — common generated files, local configuration, credentials, and runtime data exclusions.
-- `.env.example` — names and safe placeholders for environment variables; never put real secrets here.
-- `docs/architecture.md` — current system overview and pointers to important design choices.
-- `docs/adr/` — durable records of significant architecture decisions.
-
-## Template maintenance
-
-Keep this repository stack-neutral. When changing the workflow, update the relevant source file and this guide if the change affects how a new project is bootstrapped. Use Git tags such as `v1.0.0` to identify template versions used by new repositories.
+`Issue → branch → plan → implementation → validation → commit → pull request → review/CI → merge`

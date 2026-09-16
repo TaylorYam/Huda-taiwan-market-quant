@@ -9,5 +9,6 @@ Supporting policies:
 - [`roadmap-v0.1.md`](roadmap-v0.1.md) sequences the future data, factor, scoring, backtest, dashboard, and automation work, with issue-ready acceptance criteria.
 - [`data-contract-v0.1.md`](data-contract-v0.1.md) defines shared date, timestamp, unit, revision, and missing-data semantics for future collectors.
 - [`phase0-source-research-v0.1.md`](phase0-source-research-v0.1.md) records verified official source windows, free BFI82U/FMTQIK candidates, and remaining retrieval checks.
+- [`phase0-cash-factor-source-verification-v0.1.md`](phase0-cash-factor-source-verification-v0.1.md) records the reproduced cash-market boundary samples and why the historical foreign cash factor remains blocked on a version definition.
 
 The model, data-window policy, and backtest spec are draft v0.1 specifications. Confirm source fields, publication times, and historical availability before implementation, then validate scoring thresholds and weights against reproducible historical data. Use the roadmap to sequence that work; it does not override the model definitions.

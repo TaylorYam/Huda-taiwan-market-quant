@@ -154,6 +154,7 @@ Web Dashboard
 - 第一版優先使用 TWSE + TAIFEX 官方免費來源
 - 權重與門檻皆視為待回測的初始假設
 - 第一版不以機器學習預測明日漲跌為主要方向
+- Phase 1 本機開發採用被 Git 忽略的 SQLite；正式排程的持久來源仍須另立 Accepted ADR（見 [ADR 0001](adr/0001-phase-1-storage-boundary.md)）
 
 後續若這些決策成為長期架構基礎，可另外建立 ADR。
 

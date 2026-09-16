@@ -82,6 +82,16 @@ def test_new_source_revision_can_link_to_previous_revision(tmp_path):
         assert store.list_revisions(make_observation())[-1].source_revision == "r2"
 
 
+def test_new_source_revision_requires_lineage_link(tmp_path):
+    with SQLiteObservationStore(tmp_path / "market.sqlite3") as store:
+        store.write_observation(make_observation(source_revision="r1"))
+
+        with pytest.raises(ValueError, match="requires supersedes_id"):
+            store.write_observation(
+                make_observation(source_revision="r2", source_payload_hash="2" * 64)
+            )
+
+
 def test_changed_payload_requires_explicit_revision_link(tmp_path):
     with SQLiteObservationStore(tmp_path / "market.sqlite3") as store:
         store.write_observation(make_observation())

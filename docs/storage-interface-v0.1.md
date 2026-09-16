@@ -20,7 +20,7 @@ Phase 1 以 `SQLiteObservationStore` 實作 [ADR 0001](adr/0001-phase-1-storage-
 
 - 同一 identity 與相同 payload hash 重跑時回傳既有 ID，增加 `retrieval_count` 並以時間較晚者更新 `last_retrieved_at`。
 - 同一版本 identity 但 payload 改變時，呼叫端必須明確提供 `supersedes_id`；儲存層追加新列，不覆寫舊值。
-- 新 `source_revision` 也可追加版本；若提供 `supersedes_id`，它必須指向相同資料集／日期／列鍵／publication label 的 lineage。不存在或跨資料集／日期／列鍵的指向會拒絕。
+- 新 `source_revision` 也可追加版本，但已有同一資料集／日期／列鍵／publication label 的版本時必須提供 `supersedes_id`；它必須指向同一 lineage。不存在或跨資料集／日期／列鍵的指向會拒絕。
 - 七個 `quality_status` 使用資料契約的封閉集合。不可用狀態仍保存觀察信封，但不會產生有效數值的假替代。
 
 資料庫預設路徑為 `data/market.sqlite3`，並由 `.gitignore` 排除。CSV／Parquet 與 GitHub Actions artifacts 仍是匯出或短期除錯用途，不是 Phase 1 的第二寫入真相。

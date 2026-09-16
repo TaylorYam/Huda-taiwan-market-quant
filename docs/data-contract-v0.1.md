@@ -101,7 +101,7 @@
 1. [TWSE 現貨來源查證](phase0-cash-factor-source-verification-v0.1.md)已記錄免費 BFI82U 起始附近、早晚期分類與交易類型差異；仍須取得可核實的 CSV／E-Shop 版次映射或明確制定採用的可比期間，再決定分子定義並與 FMTQIK 分母對帳。只有缺口確實影響目標窗口時才評估 E-Shop 歷史商品。T86 股數仍須作獨立系列，不能替代金額因子。
 2. 各來源實際發布時間與要使用的最終報表版次，需以官方說明及可重現實測填入資料集設定。
 3. PCR 的歷史回補下界與下載方式、TX 年度 ZIP 最早可選年份、舊 TAIFEX 部位申請結果及官方成交金額分母候選見 [Phase 0 Source Research](phase0-source-research-v0.1.md)；可選年份不等同已驗證 ZIP 內容。
-4. 資料庫／檔案格式、保留期、排程執行環境與 GitHub Actions 輸出保存方式須另提 ADR；本契約不預選技術，也不批准購買資料。
+4. Phase 1 本機 SQLite 與短期 Actions artifacts 的邊界見 [ADR 0001](adr/0001-phase-1-storage-boundary.md)；正式資料庫／檔案格式、保留期、排程執行環境與長期輸出保存方式仍須另提 Accepted ADR。本契約不批准購買資料。
 
 ## 相關文件
 
@@ -110,3 +110,4 @@
 - [Backtest Spec v0.1](backtest-spec-v0.1.md)
 - [Development Roadmap v0.1](roadmap-v0.1.md)
 - [Data Storage Options v0.1](data-storage-options-v0.1.md)
+- [ADR 0001: Phase 1 storage boundary](adr/0001-phase-1-storage-boundary.md)

@@ -1,7 +1,7 @@
 # Phase 1 儲存方案評估 v0.1
 
 - 日期：2026-09-16
-- 狀態：建議稿；正式決策追蹤於 [Issue #9 ADR proposal](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/9)，尚未取代 ADR
+- 狀態：Phase 1 邊界已記錄於 [ADR 0001](adr/0001-phase-1-storage-boundary.md)（Proposed）；正式持久來源仍由 [Issue #9 ADR proposal](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/9) 追蹤
 - 範圍：Phase 1 官方市場資料收集、品質檢查與本機開發；不選購或開通任何服務
 
 ## 評估依據

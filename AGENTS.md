@@ -48,3 +48,17 @@ Keep `main` as the stable integration branch. For planned work, follow:
 ## Completion
 
 Before handing work back, review the diff, run applicable validation, and summarize the change, test results, and any remaining limitation. Leave unrelated user changes untouched.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live as GitHub Issues and are managed with `gh`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+This repo uses the default `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix` labels. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This is a single-context repo. Read root `CONTEXT.md` when present and applicable ADRs under `docs/adr/`. See `docs/agents/domain.md`.

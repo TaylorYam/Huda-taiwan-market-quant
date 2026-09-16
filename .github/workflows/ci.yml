@@ -36,3 +36,28 @@ jobs:
           else
             git diff --check "${BEFORE_SHA}...HEAD"
           fi
+
+  python:
+    name: Python tests and lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install validation dependencies
+        run: python -m pip install --upgrade pip pytest ruff
+
+      - name: Run Ruff lint
+        run: ruff check src tests
+
+      - name: Check Ruff formatting
+        run: ruff format --check src tests
+
+      - name: Run tests
+        run: pytest -q

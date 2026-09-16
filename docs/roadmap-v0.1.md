@@ -103,5 +103,5 @@
 - **儲存方案草案：** 已比較本機 SQLite、CSV／Parquet、Git、Actions artifacts 與外部持久服務；建議 SQLite 僅作 Phase 1 本機開發預設。正式排程的持久來源由 [Issue #9 ADR proposal](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/9) 追蹤，尚未接受任何外部服務或購買決策。
 - **Phase 0 進度：** Issue #5 已完成並合併。現貨查證確認免費 BFI82U 2004-04-07 的外資列與近期拆分列不同，且早期報表不含鉅額而 FMTQIK 分母包含鉅額；E-Shop 檔案碼／時間版次映射與 CSV 欄位對照仍未知，因此歷史現貨因子暫不得實作。Issue #7 正補 PCR、TX 與 VIX 邊界：PCR 抽樣明確首末可取資料日與 30 日差限制，但全期完整率未知；TX 已檢查 1998、2024、2025 年檔，未查年度及 1998 日曆保留未知；VIX 已驗證單日盤中 TXT 樣本內容，但日收盤下載 payload／值仍未核實。法人 OI 舊資料供應仍未確認。正式排程儲存仍待 ADR。
 - **程式狀態：** 目前只有 Python package 骨架，沒有正式資料收集器、儲存層、因子、評分、回測或 Dashboard 實作。
-- **下一個工作包：** PR #8 先完成審查與合併；接著按 [Issue #9 ADR proposal](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/9) 決定 Phase 1 資料保存邊界。Issue #7 尚有未完成的全期 PCR、其餘 TX 年檔與 VIX 日收盤 payload 驗證，仍保留未知，不購買資料或開發收集器。
+- **下一個工作包：** 按 [Issue #9 ADR proposal](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/9) 決定 Phase 1 資料保存邊界。Issue #7 尚有未完成的全期 PCR、其餘 TX 年檔與 VIX 日收盤 payload 驗證，仍保留未知，不購買資料或開發收集器。
 - **GitHub Issue 狀態：** Issue #5 已完成並關閉；目前開啟的 Phase 0 後續項目為 Issue #7。Roadmap 其他工作項目仍是草案，不代表已建立 GitHub Issues。

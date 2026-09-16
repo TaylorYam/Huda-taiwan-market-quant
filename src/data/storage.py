@@ -257,7 +257,7 @@ class SQLiteObservationStore:
         with self._connection:
             existing = self._connection.execute(
                 """
-                SELECT id, retrieval_count
+                SELECT id, retrieval_count, last_retrieved_at
                 FROM observations
                 WHERE dataset_id = ?
                   AND observation_date = ?

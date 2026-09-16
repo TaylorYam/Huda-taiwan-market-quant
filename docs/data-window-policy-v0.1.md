@@ -142,12 +142,8 @@ Model B：移除限制資料長度的因子，較長歷史
 
 ---
 
-## 下一步
+## Probe 結果與下一步
 
-實際對 TWSE / TAIFEX 資料來源進行 Data Availability Probe，產出一張表：
+第一輪官方資料盤點與 Phase 0 補查分別見 [Data Availability Probe v0.1](data-availability-probe-v0.1.md) 與 [Phase 0 Source Research](phase0-source-research-v0.1.md)。除股數口徑的免費 T86 外，已找到免費 BFI82U 外資買賣金額日報表（頁面標示自 2004-04-07 起）及免費 FMTQIK 市場成交金額資料；外資分類／發布版本、同日交易類型口徑與可回補最早日仍須驗證。TAIFEX 外資期貨部位歷史頁只提供近三年、免費 Taiwan VIX 日期查詢最多近三年；PCR 可查歷史下界和 TX 年度 ZIP 首筆尚待實測。各資料集缺值率尚未計算。
 
-```text
-Dataset | Source | Earliest | Latest | Missing | Automation | Notes
-```
-
-找到真正限制完整模型回測期間的資料集，再正式鎖定 Backtest Window。
+下一步和驗收條件已排入 [`roadmap-v0.1.md`](roadmap-v0.1.md) Phase 0–1：先確認現貨流因子的金額或股數口徑，並決定是否申請／訂閱延伸歷史；在完整下載並比對交易日、公布時間與缺值後，再計算共同資料起點及正式回測起點。不能只因查詢頁顯示近三年，就假定已有足夠的三年暖機期和後續回測樣本。

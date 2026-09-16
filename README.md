@@ -83,7 +83,9 @@ Python 每日抓取
 | 風險 | Taiwan VIX | 15% |
 |  | **合計** | **100%** |
 
-詳細定義與初始評分規則請見 [`docs/factor-model-v0.1.md`](docs/factor-model-v0.1.md)。
+詳細定義與初始評分規則請見 [`docs/factor-spec.md`](docs/factor-spec.md) 及其連結的版本化模型文件。
+
+各文件中尚未實作的資料、評分、回測與 Dashboard 方向，已整併為 [`docs/roadmap-v0.1.md`](docs/roadmap-v0.1.md)，包含依賴順序、驗收條件與 GitHub Issue 草案。
 
 ## 目前階段
 
@@ -92,14 +94,45 @@ Python 每日抓取
 - [x] 定義 Market Direction Model v0.1
 - [x] 定義 8 個核心因子與初始權重
 - [x] 定義 Factor Score 0–100 的基本方式
-- [ ] 驗證每個 TWSE / TAIFEX 實際下載端點與欄位
-- [ ] 建立資料抓取模組
-- [ ] 建立歷史資料庫
-- [ ] 建立 Factor 計算
-- [ ] 建立回測框架
-- [ ] 回測與調整 v0.1 權重
-- [ ] 建立網站 Dashboard
-- [ ] 建立 GitHub Actions 每日自動更新
+- [x] 完成第一輪資料可用性探測（缺值率與部分歷史下界仍待完整下載驗證）
+- [x] 補查免費 BFI82U 現貨金額及 FMTQIK 成交金額資料來源；建立資料契約草案
+- [ ] 核對現貨金額分子／分母的版次、交易範圍與歷史缺口，並決定實體保存方案（Roadmap Phase 0）
+- [ ] 建立官方資料收集與品質檢查（Phase 1）
+- [ ] 實作 8 個因子與 Market Score（Phase 2）
+- [ ] 驗證分數辨識力；通過後才做策略層回測（Phase 3）
+- [ ] 建立 Dashboard、CI 與每日資料流程（Phase 4）
+
+## 專案結構
+
+```text
+.
+├── README.md
+├── AGENTS.md
+├── .gitignore
+├── requirements.txt
+├── docs/
+│   ├── factor-spec.md
+│   ├── factor-model-v0.1.md
+│   ├── data-window-policy-v0.1.md
+│   ├── data-availability-probe-v0.1.md
+│   ├── phase0-source-research-v0.1.md
+│   ├── phase0-cash-market-scope-v0.1.md
+│   ├── phase0-taifex-history-v0.1.md
+│   ├── data-contract-v0.1.md
+│   ├── data-storage-options-v0.1.md
+│   ├── backtest-spec-v0.1.md
+│   ├── roadmap-v0.1.md
+│   └── adr/
+├── src/
+│   ├── data/
+│   ├── factors/
+│   ├── scoring/
+│   └── dashboard/
+├── tests/
+└── .github/
+    ├── ISSUE_TEMPLATE/
+    └── pull_request_template.md
+```
 
 ## Contribution flow
 

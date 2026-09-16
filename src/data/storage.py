@@ -8,6 +8,7 @@ SQLite-specific SQL or connection details.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -26,6 +27,7 @@ QUALITY_STATUSES = frozenset(
         "not_applicable",
     }
 )
+SOURCE_NAMES = frozenset({"TWSE", "TAIFEX"})
 
 
 @dataclass(frozen=True)
@@ -132,13 +134,22 @@ def _validate_date(value: str, field_name: str) -> None:
         raise ValueError(f"{field_name} must be YYYY-MM-DD")
 
 
-def _validate_timestamp(value: str, field_name: str, *, require_utc: bool = False) -> None:
+def _parse_timestamp(value: str, field_name: str) -> datetime:
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as exc:
-        raise ValueError(f"{field_name} must be an RFC 3339 timestamp with timezone") from exc
+        raise ValueError(
+            f"{field_name} must be an RFC 3339 timestamp with timezone"
+        ) from exc
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise ValueError(f"{field_name} must include a timezone")
+    return parsed
+
+
+def _validate_timestamp(
+    value: str, field_name: str, *, require_utc: bool = False
+) -> None:
+    parsed = _parse_timestamp(value, field_name)
     if require_utc and parsed.utcoffset() != timezone.utc.utcoffset(parsed):
         raise ValueError(f"{field_name} must use UTC")
 
@@ -158,7 +169,11 @@ def _validate_observation(observation: Observation) -> None:
             raise ValueError(f"{field_name} must not be empty")
 
     _validate_date(observation.observation_date, "observation_date")
-    _validate_date(observation.source_date, "source_date")
+    if (
+        not isinstance(observation.source_date, str)
+        or not observation.source_date.strip()
+    ):
+        raise ValueError("source_date must preserve a non-empty official source value")
     _validate_timestamp(observation.retrieved_at, "retrieved_at", require_utc=True)
     _validate_timestamp(observation.ingested_at, "ingested_at", require_utc=True)
     if observation.published_at is not None:
@@ -168,6 +183,12 @@ def _validate_observation(observation: Observation) -> None:
     if observation.quality_status not in QUALITY_STATUSES:
         allowed = ", ".join(sorted(QUALITY_STATUSES))
         raise ValueError(f"quality_status must be one of: {allowed}")
+    if observation.source_name not in SOURCE_NAMES:
+        raise ValueError("source_name must be TWSE or TAIFEX")
+    if re.fullmatch(r"[0-9a-fA-F]{64}", observation.source_payload_hash) is None:
+        raise ValueError(
+            "source_payload_hash must be a 64-character SHA-256 hex digest"
+        )
     if not isinstance(observation.values, Mapping):
         raise TypeError("values must be a mapping")
     try:
@@ -248,13 +269,24 @@ class SQLiteObservationStore:
                 identity,
             ).fetchone()
             if existing is not None:
+                previous_retrieved_at = existing["last_retrieved_at"]
+                latest_retrieved_at = (
+                    observation.retrieved_at
+                    if _parse_timestamp(observation.retrieved_at, "retrieved_at")
+                    > _parse_timestamp(previous_retrieved_at, "last_retrieved_at")
+                    else previous_retrieved_at
+                )
                 self._connection.execute(
                     """
                     UPDATE observations
                     SET last_retrieved_at = ?, retrieval_count = ?
                     WHERE id = ?
                     """,
-                    (observation.retrieved_at, existing["retrieval_count"] + 1, existing["id"]),
+                    (
+                        latest_retrieved_at,
+                        existing["retrieval_count"] + 1,
+                        existing["id"],
+                    ),
                 )
                 return WriteResult(existing["id"], "duplicate")
 
@@ -287,8 +319,13 @@ class SQLiteObservationStore:
                 ).fetchone()
                 if prior is None:
                     raise ValueError("supersedes_id does not reference an observation")
-                if tuple(prior[field] for field in base_identity_fields()) != base_identity:
-                    raise ValueError("supersedes_id must reference the same observation identity")
+                if (
+                    tuple(prior[field] for field in base_identity_fields())
+                    != base_identity
+                ):
+                    raise ValueError(
+                        "supersedes_id must reference the same observation identity"
+                    )
 
             cursor = self._connection.execute(
                 """

@@ -109,7 +109,7 @@ Web Dashboard
 
 歷史資料需可供回測重算，避免只保存最新一天結果。
 
-欄位、時間戳、單位、修訂及缺值的共同語義見 [`data-contract-v0.1.md`](data-contract-v0.1.md)。實體儲存格式與保留期仍須經 ADR 決定。
+欄位、時間戳、單位、修訂及缺值的共同語義見 [`data-contract-v0.1.md`](data-contract-v0.1.md)。Phase 1 本機開發儲存方案的比較與建議見 [`data-storage-options-v0.1.md`](data-storage-options-v0.1.md)；正式排程的持久來源、格式與保留期仍須經 ADR 決定。
 
 生成的 runtime cache、credentials 與 populated `.env` 不應提交到 Git。
 

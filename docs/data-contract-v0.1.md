@@ -3,7 +3,7 @@
 - 狀態：Draft；欄位語義可供收集器實作，現貨因子來源及實體儲存方案仍待決。
 - 日期：2026-09-15
 
-本契約定義官方市場資料進入系統後的共同時間、來源、單位、維護方式及缺值語義。它定義邏輯資料形狀，不指定 JSON、Parquet、SQLite 或其他實體儲存技術；持久化選擇須依 ADR 流程決定。
+本契約定義官方市場資料進入系統後的共同時間、來源、單位、維護方式及缺值語義。它定義邏輯資料形狀，不指定 JSON、Parquet、SQLite 或其他實體儲存技術；Phase 1 儲存方案比較見 [Data Storage Options v0.1](data-storage-options-v0.1.md)，正式持久化選擇須依 ADR 流程決定。
 
 ## 設計原則
 
@@ -109,3 +109,4 @@
 - [Data Window Policy v0.1](data-window-policy-v0.1.md)
 - [Backtest Spec v0.1](backtest-spec-v0.1.md)
 - [Development Roadmap v0.1](roadmap-v0.1.md)
+- [Data Storage Options v0.1](data-storage-options-v0.1.md)

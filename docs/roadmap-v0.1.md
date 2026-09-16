@@ -6,6 +6,9 @@
 
 - [Factor Model v0.1](factor-model-v0.1.md)：8 個核心因子、權重與初始評分定義，是模型行為的唯一來源。
 - [Data Availability Probe v0.1](data-availability-probe-v0.1.md)：官方來源、已驗證窗口與尚未確認的資料缺口。
+- [TWSE 現貨口徑補查](phase0-cash-market-scope-v0.1.md)：BFI82U／FMTQIK 樣本範圍、E-Shop 版次差異及未解問題。
+- [TAIFEX 歷史窗口補查](phase0-taifex-history-v0.1.md)：PCR 查詢上限與起始樣本、TX 年行情 ZIP 首列、法人 OI 公開窗口。
+- [Phase 1 儲存方案評估](data-storage-options-v0.1.md)：本機開發與正式排程持久化的比較；仍待 ADR 定案。
 - [Data Window Policy v0.1](data-window-policy-v0.1.md)：共同歷史起點、暖機期與回測期間原則。
 - [Backtest Spec v0.1](backtest-spec-v0.1.md)：as-of、未來報酬、兩層回測及驗證標準。
 - [Architecture Overview](architecture.md)：資料收集、因子、評分、回測與展示的模組邊界。
@@ -25,9 +28,9 @@
 
 先解決會影響資料格式、因子單位或共同回測區間的問題。這些工作不需要付費即可先調查；任何訂閱或歷史資料購買仍須另行決定。
 
-1. **決定外資現貨因子的來源口徑。** v0.1 公式使用買賣超金額除以市場成交金額。除免費 T86 股數外，已找到免費 TWSE BFI82U 金額日報表；E-Shop 商品另有不同歷史起點及 14:50／19:40 版本。Issue 要先核對 BFI82U 可回補範圍、外資分類及版本，再對照成交金額分母；若改採股數代理才需更新模型版本與權重，不能在程式中靜默換單位。
-2. **補完歷史窗口探測。** 實測 PCR 指定起訖日期的回溯下界、下載並檢查最早可選 1998 年的 TX 行情年度 ZIP、VIX 三年查詢的可下載方式，以及 TAIFEX 舊法人部位申請程序。下載完整樣本後再計算 missing ratio 和共同原始起點。
-3. **定義資料契約及保存方式。** [`data-contract-v0.1.md`](data-contract-v0.1.md) 已建立邏輯欄位、日期時區、單位、契約、盤別、發布時間、來源、修訂與缺值語義；尚未選實體格式或保存技術。之後透過 ADR 流程比較本機開發、CI 排程與 GitHub 儲存的成本和限制。
+1. **決定外資現貨因子的來源口徑。** v0.1 公式使用買賣超金額除以市場成交金額。已抽查 BFI82U 與 FMTQIK 樣本註記，交易類型及外幣換算相符；仍須驗證免費報表與 E-Shop 14:50／19:40 版次映射、外資分類、歷史查詢及跨期完整性。詳見[現貨口徑補查](phase0-cash-market-scope-v0.1.md)。若改採股數代理才需更新模型版本與權重，不能在程式中靜默換單位。
+2. **補完歷史窗口探測。** 已確認 PCR CSV 單次查詢最多 30 日、樣本最早列為 2001-12-24，1998 年 TX ZIP 首筆有效 TX 行情為 1998-07-21；公開法人 OI 僅能查近三年，舊資料走申請路徑。仍需完整遍歷檔案及 PCR 日期段、核對交易日缺漏，並確認 VIX 三年查詢下載方式。詳見[TAIFEX 歷史窗口補查](phase0-taifex-history-v0.1.md)。
+3. **定義資料契約及保存方式。** [`data-contract-v0.1.md`](data-contract-v0.1.md) 已建立邏輯欄位、日期時區、單位、契約、盤別、發布時間、來源、修訂與缺值語義；[儲存方案評估](data-storage-options-v0.1.md) 建議 Phase 1 單機開發先用 Git 忽略的 SQLite。正式排程的持久來源、保留期與存取方式仍須透過 ADR 定案。
 4. **寫明仍未封口的模型邊界。** 包括 PCR 的百分位方向、Basis 的近月及轉倉規則、VIX 的 1 年或 3 年百分位、總分區間端點，以及必要因子缺值時總分應為 unavailable。這些決定要在因子／評分實作之前進模型規格或 ADR。
 
 **Phase 0 完成條件：** 核心欄位及單位已定義；每個必要資料源有可重現的最新查詢方式與已驗證的歷史下界；付費項目與授權限制標示清楚；模型邊界決策已記錄；未知項目不再被當成已確認假設。
@@ -80,9 +83,9 @@
 
 | 順序 | Issue 標題 | 驗收條件 | 依賴 |
 |---:|---|---|---|
-| 1 | 驗證外資現貨 5 日因子的金額來源與交易口徑 | 實測免費 BFI82U 的日期查詢、金額欄位、分類、版本及修訂；和 FMTQIK 成交金額分母同日比對範圍；判斷是否需要 E-Shop 歷史商品或模型版本變更 | Data Availability Probe、Phase 0 Source Research |
-| 2 | 驗證 PCR、VIX、TX 行情歷史回補窗口 | 對 PCR 測試早期起訖並檢查 CSV；下載 1998 年 TX ZIP 驗證首筆；記錄 VIX 查詢與舊法人部位資料路徑；未能驗證的項目保留未知 | Data Availability Probe、Phase 0 Source Research |
-| 3 | 定義標準資料契約與歷史資料保存方案 | 提交欄位／主鍵／時間語義／單位／修訂規則；若決定持久化技術，新增 Accepted ADR | Issue 1–2 |
+| 1 | 驗證外資現貨 5 日因子的金額來源與交易口徑 | 審閱[現貨口徑補查](phase0-cash-market-scope-v0.1.md)；驗證免費 BFI82U 起始附近查詢、版次／分類及逐日完整性，按合法可用樣本核對金額與 FMTQIK 分母；未解前保留版次欄位，不拼接異質序列 | Data Availability Probe、Phase 0 Source Research |
+| 2 | 驗證 PCR、VIX、TX 行情歷史回補窗口 | 審閱[TAIFEX 歷史窗口補查](phase0-taifex-history-v0.1.md)；逐段（每段最多 30 日）回補 PCR 並比對交易日；盤點 1998 TX ZIP 全檔；確認 VIX 三年下載方式與舊法人 OI 申購資料規格；未能驗證的項目保留未知 | Data Availability Probe、Phase 0 Source Research |
+| 3 | 定義標準資料契約與歷史資料保存方案 | 提交欄位／主鍵／時間語義／單位／修訂規則；審閱 [儲存方案比較](data-storage-options-v0.1.md)；在啟用正式每日排程前，選定持久化技術並新增 Accepted ADR | Issue 1–2 |
 | 4 | 建立 TAIEX 與外資現貨收集器 | 支援回填及單日更新；驗證 HTTP、日期、欄位、單位；錯誤不寫成有效觀察值 | Issue 1、3 |
 | 5 | 建立 TAIFEX TX、法人部位、PCR、VIX 收集器 | 保留契約、交易時段、OI、發布時間；最新快照可增量累積，歷史回填路徑有文件 | Issue 2–3 |
 | 6 | 建立資料品質報告與交易日覆蓋檢查 | 顯示各來源 earliest/latest、missing ratio、重複列、stale 狀態與失敗原因 | Issue 4–5 |
@@ -96,7 +99,8 @@
 ## 目前狀態
 
 - **已完成文件基礎：** 目標／架構、factor model、data window policy、backtest spec、第一輪 data availability probe。
-- **Phase 0 進度：** 已找到免費 BFI82U 金額日報表與免費 FMTQIK 成交金額資料候選；外資分類／報表版次、兩者同日交易範圍、PCR 歷史下界與 TX ZIP 內容仍待下載驗證。邏輯資料契約已成草案，實體儲存仍待 ADR。
+- **儲存方案草案：** 已比較本機 SQLite、CSV／Parquet、Git、Actions artifacts 與外部持久服務；建議 SQLite 僅作 Phase 1 本機開發預設。正式排程仍須另立 ADR 決定持久來源。
+- **Phase 0 進度：** BFI82U／FMTQIK 已查樣本交易類型與外幣換算註記相符，但歷史完整性、早期分類及 E-Shop 版次映射未定；PCR 30 日查詢上限、2001-12-24 起始樣本、1998 TX ZIP 首筆及法人 OI 三年公開窗口已核實。完整缺值率、VIX 下載與舊 OI 歷史供應仍未驗證。正式排程儲存仍待 ADR。
 - **程式狀態：** 目前只有 Python package 骨架，沒有正式資料收集器、儲存層、因子、評分、回測或 Dashboard 實作。
 - **下一個工作包：** 完成 Issue 1–3 的來源與契約驗收，不買付費資料；接著按定案契約實作 TAIEX 與外資現貨收集器，再逐項積累可回測資料。
 - **尚未建立的內容：** 本文件是 GitHub-ready Issue 草案，建立真正 Issues 前仍須透過 GitHub UI/API 建立並記錄 Issue 編號；不得把本機文件視為已發布 Issue。

@@ -2,9 +2,9 @@
 
 ## 範圍與方法
 
-盤點起始日期：2026-09-15（Asia/Taipei）；Phase 0 補查至 2026-09-16。依 `factor-model-v0.1.md` 的 8 個核心因子，合併共用 TAIEX 行情的均線與 20 日動能，檢查官方 TWSE / TAIFEX 網頁、OpenAPI 與歷史資料申請頁。後續實測結果分別記錄於 [TWSE 現貨口徑補查](phase0-cash-market-scope-v0.1.md) 與 [TAIFEX 歷史窗口補查](phase0-taifex-history-v0.1.md)。
+盤點起始日期：2026-09-15（Asia/Taipei）；Phase 0 補查至 2026-09-16。依 `factor-model-v0.1.md` 的 8 個核心因子，合併共用 TAIEX 行情的均線與 20 日動能，檢查官方 TWSE / TAIFEX 網頁、OpenAPI 與歷史資料申請頁，並檢視使用者提供的一日 VIX 盤中 TXT 樣本。後續實測結果分別記錄於 [TWSE 現貨口徑補查](phase0-cash-market-scope-v0.1.md) 與 [TAIFEX 歷史窗口補查](phase0-taifex-history-v0.1.md)。
 
-「最早可查日期」、「查詢頁目前可回溯的窗口」和「本次實際量到的缺值率」是不同欄位。本次未下載每個來源的完整日序列與交易日曆，因此缺值率一律標為未測，不以目前 API 有回資料推定全期間完整。已實測的日資料樣本最新至 2026-09-14；VIX 免費頁以月份呈現，本次未測其單日最新值。
+「最早可查日期」、「查詢頁目前可回溯的窗口」和「本次實際量到的缺值率」是不同欄位。本次未下載每個來源的完整日序列與交易日曆，因此缺值率一律標為未測，不以目前 API 有回資料推定全期間完整。其他日資料樣本最新至 2026-09-14；VIX 每日收盤頁確認最新資料日為 2026-09-15，另檢視同日盤中樣本，但未驗證日收盤下載 payload 或值。
 
 ## 結果摘要
 
@@ -32,7 +32,7 @@
 | 外資 TX 未平倉淨部位（及 5 日變化） | TAIFEX [三大法人區分期貨契約資料](https://www.taifex.com.tw/cht/3/futContractsDateView)；[OpenAPI 規格](https://openapi.taifex.com.tw/) 的 `MarketDataOfMajorInstitutionalTradersDetailsOfFuturesContractsBytheDate` 可取得最新快照。實測最新快照為 2026-09-14，共 66 列；以契約 `臺股期貨`、法人 `外資及陸資` 取 `OpenInterest(Net)`。 | 官方頁標示資料自 2008-04-07 起；一般歷史查詢僅提供查詢日前三年，較早資料需填公開資料申購表。OpenAPI 端點沒有日期查詢參數，只回最新快照。 | 每交易日。欄位含契約、法人、買／賣／淨交易量與買／賣／淨未平倉口數。OpenAPI 適合每日增量保存；直接 API 不適合回填。 | 未測。每日 13:45 公布前的資料不完整；16:15 最後一批才含國外成分證券 ETF／境外指數 ETF 交易量。回測須選定一致的公布版本與 as-of 時間。最後結算日未平倉量自 2008-12-17 起不含當月份到期商品。 |
 | TX 期貨行情（Basis） | TAIFEX [期貨每日行情查詢](https://www.taifex.com.tw/cht/3/futDailyMarketReport?commodityId=TX)、[年度行情下載](https://www.taifex.com.tw/cht/3/dlFutDailyMarketView) 及 OpenAPI `DailyMarketReportFut`。年度 ZIP 表單 POST `/cht/3/futDataDown`（`down_type=2`、`his_year`）；選單列 1998–2025 共 28 年。 | 1998、2024、2025 三份全檔稽核：1998 首末 TX 日期 1998-07-21–12-31（625 列／125 日期）；2024 為 2024-01-02–12-31（6,755 列／242 日期）；2025 為 2025-01-02–12-31（6,055 列／243 日期）。 | Big5 CSV。1998 標頭 16 欄；2024/25 標頭 19 欄、資料列 20 欄，末欄無標題且為空。近年一般／盤後資料應用交易時段納入主鍵；TX 價格與 Basis 需固定近月及轉倉規則。 | 三檔各自重複鍵 0；2024/25 日期集合與官方行事曆及臨時休市公告相符。1998 每一個日期至少有正成交量 TX 列，但歷史官方交易日曆未取得，不能判定逐日缺漏；其餘 25 年未稽核。見[TAIFEX 歷史窗口補查](phase0-taifex-history-v0.1.md)。 |
 | TXO OI Put/Call Ratio | TAIFEX [Put/Call Ratio 官方頁](https://www.taifex.com.tw/cht/3/dlPcRatio) 網頁表單 POST 支援日期區間；OpenAPI `GET /PutCallRatio` 無日期參數，只回最新快照。官方頁合併週到期與月契約。 | 最早可取列 2001-12-24；最新樣本資料日 2026-09-15。UI 限制為起訖相差最多 30 個曆日、端點含在內（每段最多 31 日），全期估計 292 個不重疊區段；只抽查代表區段，連續完整度未驗證。 | 每交易日；買賣權成交量、成交量 PCR、Put OI、Call OI、OI PCR。歷史回補欄位、端點與樣本結果見[TAIFEX 歷史窗口補查](phase0-taifex-history-v0.1.md)。 | 抽查 2001 上市初期、2025 端午補假週及最新區段，資料列無重複；2025/05/30 缺列由官方行事曆確認為休市。空值不可當作 PCR=0；需以交易日曆驗證完整下載後的覆蓋率。 |
-| Taiwan VIX（日收盤） | TAIFEX [前 3 個月每日收盤 VIX](https://www.taifex.com.tw/cht/7/vixDaily3MNew) 頁面實測可見 2026/06–09 月份，最新資料日 2026-09-15；[指數專區](https://www.taifex.com.tw/indes/index.aspx) 點選「3年」實測圖表窗口為 2023-09-16–2026-09-15，提前一天則遭拒。TAIFEX E-Data Shop 另有 [VIX 新版歷史資料](https://edatashop.taifex.com.tw/zh/product/detail/40283ab7890b3664018924255bf2000f)。 | 免費每日收盤頁：當月與前三個月（頁面月份 2026/06–09）；圖表查詢：最近三年。付費歷史商品頁列示起自 2007-01-01、至申購日前一完整月份，NT$3,000／半年。 | 頁面欄位為交易日期、臺指選擇權波動率指數。尚未實測免費每日 CSV 下載回應、月份內精確首末列、最新指數值或三年圖表匯出；付費商品不代表已取得資料。 | 三年圖表範圍與每日收盤下載頁是不同窗口。免費頁註記 2020-11-23 起新增收盤前 1 分鐘平均揭示，但尚未核實其是否為獨立欄位，須在模型中固定資料口徑；VIX 與其他因子仍需同交易日對齊。 |
+| Taiwan VIX（日收盤／盤中分開） | 免費[每日收盤頁](https://www.taifex.com.tw/cht/7/vixDaily3MNew)可見 2026/06–09 月，最新資料日 2026-09-15；[指數專區](https://www.taifex.com.tw/indes/index.aspx)「3年」圖表窗口為 2023-09-16–2026-09-15。另有[盤中頁](https://www.taifex.com.tw/cht/7/vixMinNew)。 | 免費每日收盤頁：當月與前三個月；圖表查詢：最近三年。使用者提供的 2026-09-15 盤中 TXT 僅驗證一個交易日。付費歷史商品頁列示起自 2007-01-01、至申購日前一完整月份，NT$3,000／半年。 | 盤中樣本以 Big5／CP950 解碼後有 1,141 筆、09:00–13:45 每 15 秒一筆，唯一時間戳；VIX 範圍 27.01–27.76，末筆與 `Last 1 min AVG` 皆為 27.29。日收盤頁的 CSV payload、首末列及日收盤值仍未驗證；付費商品不代表已取得資料。 | 盤中最後一筆／最後一分鐘平均，不等於已驗證的日收盤序列。日收盤下載頁與盤中查詢是不同窗口及口徑；解析器還須容忍盤中檔標頭與資料列欄數不同及空白欄。三年圖表未驗證匯出；VIX 與其他因子仍需同交易日對齊。 |
 
 ## 對共同回測期間的影響
 

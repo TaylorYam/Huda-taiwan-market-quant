@@ -8,7 +8,7 @@
 - [Data Availability Probe v0.1](data-availability-probe-v0.1.md)：官方來源、已驗證窗口與尚未確認的資料缺口。
 - [TWSE 現貨口徑補查](phase0-cash-market-scope-v0.1.md)：BFI82U／FMTQIK 樣本範圍、E-Shop 版次差異及未解問題。
 - [TWSE 現貨金額因子來源查證](phase0-cash-factor-source-verification-v0.1.md)：核對起始日附近的實際報表、交易範圍差異及仍未知的檔案版次映射。
-- [TAIFEX 歷史窗口補查](phase0-taifex-history-v0.1.md)：PCR 查詢上限與起始樣本、TX 年行情 ZIP 首列、法人 OI 公開窗口。
+- [TAIFEX 歷史窗口補查](phase0-taifex-history-v0.1.md)：PCR 日期回補窗口、TX 年行情 ZIP 樣本全檔稽核、VIX 免費查詢窗口與法人 OI 公開窗口。
 - [Phase 1 儲存方案評估](data-storage-options-v0.1.md)：本機開發與正式排程持久化的比較；仍待 ADR 定案。
 - [Data Window Policy v0.1](data-window-policy-v0.1.md)：共同歷史起點、暖機期與回測期間原則。
 - [Backtest Spec v0.1](backtest-spec-v0.1.md)：as-of、未來報酬、兩層回測及驗證標準。
@@ -30,7 +30,7 @@
 先解決會影響資料格式、因子單位或共同回測區間的問題。這些工作不需要付費即可先調查；任何訂閱或歷史資料購買仍須另行決定。
 
 1. **決定外資現貨因子的來源口徑。** v0.1 公式使用買賣超金額除以市場成交金額。[Issue #5 查證](phase0-cash-factor-source-verification-v0.1.md)確認免費 BFI82U 的早期與近期報表在鉅額交易及外資分類上有差異，並未找到 E-Shop 檔案碼與 14:50／19:40 版次的官方對應。現貨因子歷史實作仍阻擋在版本定義；不得拼接異質序列或以股數靜默替代金額。
-2. **補完歷史窗口探測。** 已確認 PCR CSV 單次查詢最多 30 日、樣本最早列為 2001-12-24，1998 年 TX ZIP 首筆有效 TX 行情為 1998-07-21；公開法人 OI 僅能查近三年，舊資料走申請路徑。仍需完整遍歷檔案及 PCR 日期段、核對交易日缺漏，並確認 VIX 三年查詢下載方式。詳見[TAIFEX 歷史窗口補查](phase0-taifex-history-v0.1.md)。
+2. **補完歷史窗口探測。** PCR 日期表單已驗證上市初期、休市日附近與最新區段，UI 的起訖日期差上限為 30 個曆日；全期約 292 段尚未遍歷。TX 年檔選單列 1998–2025，已全檔稽核 1998、2024、2025 三份；其他年度及 1998 交易日曆仍未驗證。VIX 免費頁與三年圖表窗口已核實，並檢查一份 2026-09-15 盤中 TXT 樣本（末筆及最後一分鐘平均均為 27.29）；日收盤下載 payload／值仍未核實，兩種口徑不可混用。法人 OI 公開頁僅能查近三年，舊資料走申請路徑。詳見[TAIFEX 歷史窗口補查](phase0-taifex-history-v0.1.md)。
 3. **定義資料契約及保存方式。** [`data-contract-v0.1.md`](data-contract-v0.1.md) 已建立邏輯欄位、日期時區、單位、契約、盤別、發布時間、來源、修訂與缺值語義；[儲存方案評估](data-storage-options-v0.1.md) 建議 Phase 1 單機開發先用 Git 忽略的 SQLite。正式排程的持久來源、保留期與存取方式仍須透過 ADR 定案。
 4. **寫明仍未封口的模型邊界。** 尚包括 PCR 的百分位方向、Basis 的近月及轉倉規則、VIX 的 1 年或 3 年百分位，以及必要因子缺值時總分應為 unavailable；這些決定要在因子／評分實作之前進模型規格或 ADR。Market Score 區間端點已在 [Factor Model v0.1](factor-model-v0.1.md) 與 [Backtest Spec v0.1](backtest-spec-v0.1.md) 明定。
 
@@ -80,12 +80,12 @@
 
 ## GitHub Issue 草案
 
-以下工作項目使用 `.github/ISSUE_TEMPLATE/task.md` 的格式；Phase 0 第一項已建立為 [Issue #5](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/5)，其他項目仍是草案。重大資料保存或部署選擇套用 ADR proposal，按依賴順序逐項開 Issue。
+以下工作項目使用 `.github/ISSUE_TEMPLATE/task.md` 的格式；Phase 0 第一項已由 [Issue #5](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/5) 完成，第二項已建立為 [Issue #7](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/7)，其他項目仍是草案。重大資料保存或部署選擇套用 ADR proposal，按依賴順序逐項開 Issue。
 
 | 順序 | Issue 標題 | 驗收條件 | 依賴 |
 |---:|---|---|---|
 | 1 | [#5 驗證外資現貨 5 日因子的金額來源與交易口徑](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/5) | 審閱[現貨口徑補查](phase0-cash-market-scope-v0.1.md)；驗證免費 BFI82U 起始附近查詢、版次／分類及逐日完整性，按合法可用樣本核對金額與 FMTQIK 分母；未解前保留版次欄位，不拼接異質序列 | Data Availability Probe、Phase 0 Source Research |
-| 2 | 驗證 PCR、VIX、TX 行情歷史回補窗口 | 審閱[TAIFEX 歷史窗口補查](phase0-taifex-history-v0.1.md)；逐段（每段最多 30 日）回補 PCR 並比對交易日；盤點 1998 TX ZIP 全檔；確認 VIX 三年下載方式與舊法人 OI 申購資料規格；未能驗證的項目保留未知 | Data Availability Probe、Phase 0 Source Research |
+| 2 | [#7 補完 TAIFEX PCR、TX 行情與 VIX 歷史窗口探測](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/7) | 審閱[TAIFEX 歷史窗口補查](phase0-taifex-history-v0.1.md)；PCR 每段起訖相差最多 30 個曆日（含端點）並比對交易日；盤點官方 TX ZIP 年檔；分辨並驗證 VIX 免費日收盤頁與盤中 TXT 口徑，以及三年查詢窗口；未能驗證的項目保留未知 | Data Availability Probe、Phase 0 Source Research |
 | 3 | 定義標準資料契約與歷史資料保存方案 | 提交欄位／主鍵／時間語義／單位／修訂規則；審閱 [儲存方案比較](data-storage-options-v0.1.md)；在啟用正式每日排程前，選定持久化技術並新增 Accepted ADR | Issue 1–2 |
 | 4 | 建立 TAIEX 與外資現貨收集器 | 支援回填及單日更新；驗證 HTTP、日期、欄位、單位；錯誤不寫成有效觀察值 | Issue 1、3 |
 | 5 | 建立 TAIFEX TX、法人部位、PCR、VIX 收集器 | 保留契約、交易時段、OI、發布時間；最新快照可增量累積，歷史回填路徑有文件 | Issue 2–3 |
@@ -101,7 +101,7 @@
 
 - **已完成文件基礎：** 目標／架構、factor model、data window policy、backtest spec、第一輪 data availability probe。
 - **儲存方案草案：** 已比較本機 SQLite、CSV／Parquet、Git、Actions artifacts 與外部持久服務；建議 SQLite 僅作 Phase 1 本機開發預設。正式排程仍須另立 ADR 決定持久來源。
-- **Phase 0 進度：** 現貨查證確認免費 BFI82U 2004-04-07 的外資列與近期拆分列不同，且早期報表不含鉅額而 FMTQIK 分母包含鉅額；E-Shop 檔案碼／時間版次映射與 CSV 欄位對照仍未知，因此歷史現貨因子暫不得實作。PCR 30 日查詢上限、2001-12-24 起始樣本、1998 TX ZIP 首筆及法人 OI 三年公開窗口已核實。完整缺值率、VIX 下載與舊 OI 歷史供應仍未驗證。正式排程儲存仍待 ADR。
+- **Phase 0 進度：** Issue #5 已完成並合併。現貨查證確認免費 BFI82U 2004-04-07 的外資列與近期拆分列不同，且早期報表不含鉅額而 FMTQIK 分母包含鉅額；E-Shop 檔案碼／時間版次映射與 CSV 欄位對照仍未知，因此歷史現貨因子暫不得實作。Issue #7 正補 PCR、TX 與 VIX 邊界：PCR 抽樣明確首末可取資料日與 30 日差限制，但全期完整率未知；TX 已檢查 1998、2024、2025 年檔，未查年度及 1998 日曆保留未知；VIX 已驗證單日盤中 TXT 樣本內容，但日收盤下載 payload／值仍未核實。法人 OI 舊資料供應仍未確認。正式排程儲存仍待 ADR。
 - **程式狀態：** 目前只有 Python package 骨架，沒有正式資料收集器、儲存層、因子、評分、回測或 Dashboard 實作。
-- **下一個工作包：** 完成 GitHub [Issue #5](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/5) 的來源與契約驗收，不買付費資料；其餘 Phase 0 項目按依賴順序建立 Issue，再按定案契約實作收集器。
-- **GitHub Issue 狀態：** Phase 0 第一項已建立為 Issue #5；Roadmap 其餘工作項目仍是草案，不代表已建立 GitHub Issue。
+- **下一個工作包：** 完成 GitHub [Issue #7](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/7) 的 TAIFEX PCR、TX 年行情與 VIX 歷史窗口查證；不購買資料或開發收集器。之後再按資料契約與依賴順序開 Issue。
+- **GitHub Issue 狀態：** Issue #5 已完成並關閉；目前開啟的 Phase 0 後續項目為 Issue #7。Roadmap 其他工作項目仍是草案，不代表已建立 GitHub Issues。

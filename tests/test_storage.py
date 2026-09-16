@@ -6,11 +6,11 @@ from src.data import Observation, SQLiteObservationStore
 
 
 def make_observation(**changes: object) -> Observation:
-    values = {
+    default_values = {
         "close": 22_000.5,
         "unit": "index_points",
     }
-    values.update(changes.pop("values", {}))
+    values = changes.pop("values", default_values)
     fields: dict[str, object] = {
         "dataset_id": "twse_taiex_daily_v1",
         "schema_version": "0.1",

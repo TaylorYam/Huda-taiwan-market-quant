@@ -109,6 +109,8 @@ Web Dashboard
 
 歷史資料需可供回測重算，避免只保存最新一天結果。
 
+欄位、時間戳、單位、修訂及缺值的共同語義見 [`data-contract-v0.1.md`](data-contract-v0.1.md)。實體儲存格式與保留期仍須經 ADR 決定。
+
 生成的 runtime cache、credentials 與 populated `.env` 不應提交到 Git。
 
 ## Runtime and deployment
@@ -158,3 +160,5 @@ Web Dashboard
 ## Updating this document
 
 當資料流、部署方式、核心模型邊界或重要限制發生變更時，應同步更新本文件。
+
+尚未實作的元件及其順序、驗收條件與 GitHub Issue 草案見 [`roadmap-v0.1.md`](roadmap-v0.1.md)。持久儲存、排程資料留存等長期架構選擇仍依 ADR 流程決議，不在此先行指定技術。

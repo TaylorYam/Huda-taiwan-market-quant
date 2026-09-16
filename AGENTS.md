@@ -28,6 +28,16 @@ Keep `main` as the stable integration branch. For planned work, follow:
 - Update documentation when behavior, setup, or interfaces change.
 - Record significant, long-lived architecture choices in `docs/adr/` using the format described there.
 
+## Taiwan market data and factors
+
+- Read `docs/factor-spec.md` and its linked versioned model before changing a factor, score, or market-state label. Keep the versioned model as the source of factor definitions and thresholds.
+- For historical data windows or backtests, also read `docs/data-window-policy-v0.1.md` and `docs/backtest-spec-v0.1.md`.
+- Preserve source, market date, publication or retrieval time, units, and contract identity with imported data. Apply Asia/Taipei trading dates consistently.
+- Use only information available at the score's as-of time. In backtests, prevent look-ahead from revised data, rolling thresholds, contract rolls, and publication delays.
+- Represent missing or stale observations as unavailable and report coverage; never convert them to a neutral score silently.
+- Keep data acquisition, factor calculation, aggregation, and presentation in their respective `src/` packages. Dashboard code should display computed results rather than recalculate factors.
+- Explain market direction through its factor evidence. Do not turn the score into instrument selection, entry/exit timing, or position sizing.
+
 ## Secrets and local data
 
 - Keep credentials, access tokens, private keys, passwords, and populated `.env` files out of Git and out of logs or examples.

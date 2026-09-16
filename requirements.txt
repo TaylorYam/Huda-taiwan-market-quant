@@ -1,0 +1,9 @@
+# Runtime
+numpy
+pandas
+requests
+streamlit
+
+# Development and validation
+pytest
+ruff

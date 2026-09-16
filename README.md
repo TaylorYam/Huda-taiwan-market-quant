@@ -123,6 +123,7 @@ Python 每日抓取
 │   ├── data-contract-v0.1.md
 │   ├── data-storage-options-v0.1.md
 │   ├── storage-interface-v0.1.md
+│   ├── taiex-collector-v0.1.md
 │   ├── backtest-spec-v0.1.md
 │   ├── roadmap-v0.1.md
 │   └── adr/

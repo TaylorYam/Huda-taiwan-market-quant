@@ -110,4 +110,5 @@
 - [Backtest Spec v0.1](backtest-spec-v0.1.md)
 - [Development Roadmap v0.1](roadmap-v0.1.md)
 - [Data Storage Options v0.1](data-storage-options-v0.1.md)
+- [Phase 1 Storage Interface v0.1](storage-interface-v0.1.md)
 - [ADR 0001: Phase 1 storage boundary](adr/0001-phase-1-storage-boundary.md)

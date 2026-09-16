@@ -251,7 +251,6 @@ class SQLiteObservationStore:
             observation.source_revision,
             observation.source_payload_hash,
         )
-        revision_identity = identity[:-1]
         base_identity = identity[:4]
 
         with self._connection:
@@ -299,14 +298,13 @@ class SQLiteObservationStore:
                   AND observation_date = ?
                   AND source_record_key = ?
                   AND IFNULL(publication_label, '') = IFNULL(?, '')
-                  AND IFNULL(source_revision, '') = IFNULL(?, '')
                 ORDER BY id DESC LIMIT 1
                 """,
-                revision_identity,
+                base_identity,
             ).fetchone()
             if prior is not None and supersedes_id is None:
                 raise ValueError(
-                    "a changed payload for an existing logical identity requires supersedes_id"
+                    "a new payload for an existing observation identity requires supersedes_id"
                 )
             if supersedes_id is not None:
                 prior = self._connection.execute(

@@ -121,6 +121,8 @@
 
 目的：避免不同成交量環境下，同樣買賣超金額代表不同實際力道。
 
+來源閘門：免費 BFI82U 與 FMTQIK 的候選資料在歷史交易範圍及外資分類上尚未證實跨期一致，E-Shop 檔案碼與 14:50／19:40 版次對應也未知。在來源版次、分類與交易範圍政策定案前，不得把此因子計為可用歷史觀察；查證證據見 [TWSE 現貨金額因子來源查證](phase0-cash-factor-source-verification-v0.1.md)及 [Issue #5](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/5)。
+
 ### 5.4 外資台指期淨多空部位 — 15%
 
 ```text

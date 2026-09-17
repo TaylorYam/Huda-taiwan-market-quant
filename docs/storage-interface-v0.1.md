@@ -27,10 +27,27 @@ Data API 驗證由 [`scripts/check_supabase_api.py`](../scripts/check_supabase_a
 
 資料庫預設路徑為 `data/market.sqlite3`，並由 `.gitignore` 排除。CSV／Parquet 與 GitHub Actions artifacts 仍是匯出或短期除錯用途，不是 Phase 1 的第二寫入真相。
 
+## SQLite 遷移匯出
+
+正式資料源切換前，可用 `scripts/export_sqlite_observations.py` 從本機 SQLite 產生受控 JSON 匯出：
+
+```bash
+python -m scripts.export_sqlite_observations \
+  --database data/market.sqlite3 \
+  --output /path/outside/repository/observations.json
+
+python -m scripts.validate_sqlite_export \
+  /path/outside/repository/observations.json
+```
+
+匯出依 `id` 排序，保留每列的 SQLite storage id、`supersedes_id`、payload hash、品質欄位、時間欄位與解碼後的 `values`。`id` 只用來建立遷移時的舊到新 ID 對照；正式 PostgreSQL 不應直接假設沿用 SQLite ID。遷移器應先插入無父列、建立 ID 對照，再依對照改寫 `supersedes_id` 插入修訂列，最後以 logical identity、payload hash、row count 與 revision chain 比對。輸出檔必須放在受限且不會進 Git、Actions artifact 或公開儲存的位置。
+
+`validate_sqlite_export.py` 會拒絕格式錯誤、row count 不一致、重複 identity、無效 hash、缺少父列、跨 identity 的 revision link 與 lineage cycle。若匯出是刻意篩選的片段，只有在父列已存在於目標資料庫時，才可使用 `--allow-external-parents`。
+
 ## 尚未包含的範圍
 
 - 每次 HTTP retry 的完整 retrieval event（目前先以 `retrieval_count` 與 `last_retrieved_at` 保留最小稽核資訊）。
-- factor results、Market Score、CSV 匯出與正式排程的外部持久化服務（MVP 採 Supabase Free PostgreSQL + Data API，實作與驗證由 [Issue #18](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/18) 追蹤）。
+- factor results、Market Score、CSV 匯出與正式排程的外部持久化服務（MVP 採 Supabase Free PostgreSQL + Data API，實作與驗證由 [Issue #18](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/18) 追蹤）。SQLite JSON 匯出只提供遷移輸入，不是正式資料源。
 - 原始 payload 內容保存；是否保存由來源授權及後續 Accepted ADR 決定，目前只保存 payload hash 與欄位稽核資訊。
 
 以上項目要在新增資料來源或啟用正式排程前另立 Issue／ADR，不得繞過目前的 observation contract。

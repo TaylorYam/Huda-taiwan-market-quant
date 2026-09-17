@@ -173,3 +173,49 @@ def test_non_json_numbers_are_rejected(tmp_path):
         pytest.raises(ValueError, match="JSON serializable"),
     ):
         store.write_observation(make_observation(values={"close": float("nan")}))
+
+
+def test_export_preserves_storage_ids_and_revision_lineage(tmp_path):
+    with SQLiteObservationStore(tmp_path / "market.sqlite3") as store:
+        first = store.write_observation(make_observation())
+        revised = store.write_observation(
+            make_observation(
+                values={"close": 22_001.5, "unit": "index_points"},
+                source_payload_hash="2" * 64,
+                supersedes_id=first.observation_id,
+            )
+        )
+
+        exported = store.export_observations()
+
+    assert [row["id"] for row in exported] == [
+        first.observation_id,
+        revised.observation_id,
+    ]
+    assert exported[0]["values"] == {
+        "close": 22_000.5,
+        "unit": "index_points",
+    }
+    assert exported[1]["supersedes_id"] == first.observation_id
+    assert "values_json" not in exported[0]
+
+
+def test_export_filters_by_dataset_and_date_without_changing_order(tmp_path):
+    with SQLiteObservationStore(tmp_path / "market.sqlite3") as store:
+        store.write_observation(make_observation(observation_date="2026-09-14"))
+        store.write_observation(
+            make_observation(
+                observation_date="2026-09-15",
+                source_payload_hash="2" * 64,
+                source_record_key="other",
+            )
+        )
+        result = store.export_observations(
+            dataset_ids=["twse_taiex_daily_v1"],
+            start_date="2026-09-15",
+            end_date="2026-09-15",
+        )
+
+    assert len(result) == 1
+    assert result[0]["observation_date"] == "2026-09-15"
+    assert result[0]["source_record_key"] == "other"

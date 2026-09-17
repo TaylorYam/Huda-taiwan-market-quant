@@ -18,11 +18,34 @@ Issue #18 可引用的既有證據為 [run 35191715728](https://github.com/Taylo
 - 修訂 payload 會新增 row、保存兩個 payload hash，並用 `supersedes_id` 連回前一版本；原始 observation 的值不會被改寫。
 - 這些 run 沒有證明遠端 SQL migration、Supabase Data API 權限、資料庫 backup／restore、secret rotation、配額餘裕或來源條款。run 成功不能取代下列手動 gate。
 
+### 本次 Supabase 操作（2026-09-17，Asia/Taipei）
+
+- 目標 project：`TaylorYam's Project`（ref `vfjljdhpjhaebcgdzsvz`）。已在 SQL Editor 執行 [`001_observations.sql`](../src/data/sql/001_observations.sql) 與 [`002_market_scores.sql`](../src/data/sql/002_market_scores.sql)；兩份 migration 均回傳成功。
+- 唯讀驗證確認 `public.observations` 有 39 筆、`public.market_scores` 有 0 筆；兩表的 checked-in 欄位、索引與 RLS 狀態均存在。
+- [Supabase API smoke run 35211970093](https://github.com/TaylorYam/Huda-taiwan-market-quant/actions/runs/35211970093) 成功，`SUPABASE_URL` 與 `SUPABASE_SECRET_KEY` 均由 GitHub Secrets 提供且未出現在 log。Supabase project 目前沒有 `supabase_migrations.schema_migrations` metadata table；後續若要由 CLI 管理 migration history，需另行建立受控的 migration 流程。
+
+### Quota snapshot（2026-09-17，Asia/Taipei）
+
+- Supabase 使用量頁顯示 Free Plan、目前 billing cycle 為 2026-09-17 至 2026-10-17；database size 為 24.96 MB／500 MB（5%），egress 為 0／5 GB，cached egress 為 0／5 GB，storage 為 0／1 GB，MAU 為 0／50,000。Spend cap 已啟用。
+- SQL 盤點顯示 `public.observations` 為 104 kB（39 筆）、`public.market_scores` 為 32 kB（0 筆）；兩表合計約 136 kB。專案資料庫總量仍以 Supabase usage 頁的 24.96 MB 為準。
+- GitHub Actions billing API 需要目前 token 未提供的 `user` scope，因此本次只記錄 workflow run history，未宣稱 Actions quota gate 已完成；取得核准 billing scope 後再補記官方 usage snapshot。
+
+### Access check snapshot（2026-09-17，Asia/Taipei）
+
+- GitHub repository secret names 目前為 `SUPABASE_URL`、`SUPABASE_SECRET_KEY` 與 `MARKET_DB_URL`；所有 `.github/workflows/` 的正式 writer 都只引用前兩者，`MARKET_DB_URL` 沒有 workflow 引用，但 repository 仍保留手動 PostgreSQL 檢查腳本的支援，是否撤銷交由 owner 決定。
+- Supabase SQL 檢查確認 `public.observations` 與 `public.market_scores` 都已啟用 RLS，且目前沒有 public policy。server-side `SUPABASE_SECRET_KEY` 的 API smoke 已通過；Dashboard 的獨立 publishable／read-only credential 尚未建立，因此 access separation gate 不宣稱完成。
+
+### Source terms snapshot（2026-09-17，Asia/Taipei）
+
+- [TWSE 網路資訊商店使用條款](https://eshop.twse.com.tw/zh/home/terms) 禁止未經同意以自動化裝置、指令碼、爬蟲或擷取程式下載資料；內容的使用、重製、散布及轉載另要求事前書面同意，引用時須標示來源並保持完整性。以目前條款文字，TWSE endpoint 的自動保存、備份與 Dashboard 再散布仍未取得明確授權。
+- [TAIFEX 網站使用條款](https://www.taifex.com.tw/cht/edu/userTerms) 將網站內容與資料列為受智慧財產權保護，重製、改作、散布或公開發表原則上需事前書面同意；政府資料開放平台授權的資料另有例外。直接使用交易資訊仍須對照[交易資訊使用管理辦法及契約](https://www.taifex.com.tw/cht/6/iTRule)的適用範圍與授權條件。
+- 結論：本次只完成條款定位與限制摘錄，尚未把任何來源標為 `allowed`；TWSE、TAIFEX 的自動下載、內部 Dashboard、備份與再散布邊界均維持 `unresolved`，需 owner 取得 endpoint／產品層級的書面確認後再更新 gate。
+
 ### 仍需手動完成
 
 | Gate | 完成條件 | 證據應保存在哪裡 |
 |---|---|---|
-| Remote schema and API | 在目標 Supabase project 執行 migration，確認 `observations` 可由 Data API 讀取，並成功執行 smoke workflow | Issue #18 留下日期、project 名稱、migration 版本及 workflow run URL；不貼 key 或連線值 |
+| Remote schema and API | 在目標 Supabase project 執行 migration，確認 `observations` 可由 Data API 讀取，並成功執行 smoke workflow | 已於 2026-09-17 完成；project ref `vfjljdhpjhaebcgdzsvz`、migration `001`／`002`、[smoke run 35211970093](https://github.com/TaylorYam/Huda-taiwan-market-quant/actions/runs/35211970093) |
 | Backup | 產生完整 `pg_dump`，放到核准且受限的備份位置，記錄備份日期、範圍、保存期限及 owner | Issue #18 的 metadata；dump 本身不進 GitHub |
 | Restore drill | 還原到隔離 project／database，通過 row count、logical identity、payload hash、`supersedes_id` chain 比對，記錄 RTO 與最新可還原 observation date | Issue #18 的 drill record；隔離環境完成後刪除臨時資料 |
 | Access separation and rotation | Actions writer、Dashboard reader、操作者權限各自符合最小權限；新 key 已驗證後才撤銷舊 key | 只記錄 key 類型、輪替日期、驗證 run URL；不記錄 key 值 |
@@ -118,13 +141,13 @@ Supabase Free 不提供可依賴的 managed automatic backup 或 PITR，因此�
 | 項目 | 狀態 | 操作者／日期 | 證據 |
 |---|---|---|---|
 | Local migration、idempotency、revision lineage | 已驗證 | run 35191715728、35192169763 | workflow run URL |
-| Remote SQL migration and Data API exposure | 待手動 |  | Supabase SQL Editor + smoke run URL |
+| Remote SQL migration and Data API exposure | 已驗證 | 2026-09-17（Asia/Taipei） | [Supabase API smoke run 35211970093](https://github.com/TaylorYam/Huda-taiwan-market-quant/actions/runs/35211970093)；project ref `vfjljdhpjhaebcgdzsvz` |
 | Backup export and retention | 待手動 |  | dump metadata（不含 dump／secret） |
 | Isolated restore and reconciliation | 待手動 |  | RTO、latest recoverable date、比對結果 |
-| Actions writer / Dashboard reader separation | 待手動 |  | 權限檢查與各自驗證 run |
+| Actions writer / Dashboard reader separation | 部分驗證 | 2026-09-17（Asia/Taipei） | Secrets 名稱與 RLS 已盤點；server-side smoke 通過，Dashboard 獨立唯讀 credential 尚待建立 |
 | Secret rotation | 待手動 |  | rotation date、old key revoked、smoke run |
-| Supabase / Actions quota snapshot | 待手動 |  | 使用量、增長估計、升級 trigger |
-| TWSE / TAIFEX source terms | 待手動 |  | 條款 URL、查核日期、限制與結論 |
+| Supabase / Actions quota snapshot | 部分驗證 | 2026-09-17（Asia/Taipei） | Supabase usage：24.96 MB／500 MB（5%）；Actions billing 尚待核准 scope 後補記 |
+| TWSE / TAIFEX source terms | 未解決 | 2026-09-17（Asia/Taipei） | [TWSE 條款](https://eshop.twse.com.tw/zh/home/terms)、[TAIFEX 條款](https://www.taifex.com.tw/cht/edu/userTerms)；自動下載與再散布仍待書面確認 |
 
 ### 不通過時的處置
 

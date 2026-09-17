@@ -1,5 +1,6 @@
 """Source adapters and normalized market observations."""
 
+from .migration import EXPORT_FORMAT_VERSION, validate_observation_export
 from .postgres import PostgresObservationStore
 from .storage import (
     QUALITY_STATUSES,
@@ -95,6 +96,7 @@ from .twse_taiex import (
 )
 
 __all__ = [
+    "EXPORT_FORMAT_VERSION",
     "INSTITUTIONAL_FUTURES_DATASET_ID",
     "INSTITUTIONAL_FUTURES_ENDPOINT",
     "INSTITUTIONAL_FUTURES_PARSER_VERSION",
@@ -171,4 +173,5 @@ __all__ = [
     "parse_tx_payload",
     "parse_vix_payload",
     "summarize_write_results",
+    "validate_observation_export",
 ]

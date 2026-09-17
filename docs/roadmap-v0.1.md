@@ -11,6 +11,7 @@
 - [TAIFEX 歷史窗口補查](phase0-taifex-history-v0.1.md)：PCR 日期回補窗口、TX 年行情 ZIP 樣本全檔稽核、VIX 免費查詢窗口與法人 OI 公開窗口。
 - [Phase 1 儲存方案評估](data-storage-options-v0.1.md)：本機開發與正式排程持久化的比較；本機 SQLite 邊界見 [ADR 0001](adr/0001-phase-1-storage-boundary.md)。
 - [Phase 1 Storage Interface](storage-interface-v0.1.md)：SQLite observation schema、冪等重跑與追加修訂的實作契約。
+- [Production Persistence Decision](production-persistence-decision-v0.1.md)：正式排程持久化的候選類型、驗收證據與 Accepted ADR 閘門。
 - [TAIEX Collector v0.1](taiex-collector-v0.1.md)：TWSE 月查詢 JSON 到 TAIEX 日 OHLC observation 的解析與寫入邊界。
 - [Data Window Policy v0.1](data-window-policy-v0.1.md)：共同歷史起點、暖機期與回測期間原則。
 - [Backtest Spec v0.1](backtest-spec-v0.1.md)：as-of、未來報酬、兩層回測及驗證標準。
@@ -104,7 +105,7 @@
 ## 目前狀態
 
 - **已完成文件基礎：** 目標／架構、factor model、data window policy、backtest spec、第一輪 data availability probe。
-- **儲存方案與介面：** 已比較本機 SQLite、CSV／Parquet、Git、Actions artifacts 與外部持久服務；[ADR 0001](adr/0001-phase-1-storage-boundary.md) 已接受 SQLite 作為 Phase 1 本機開發預設，[Issue #12](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/12) 已合併 observation interface 與 schema。正式排程的持久來源由 [Issue #18](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/18) 追蹤，尚未接受任何外部服務或購買決策。
+- **儲存方案與介面：** 已比較本機 SQLite、CSV／Parquet、Git、Actions artifacts 與外部持久服務；[ADR 0001](adr/0001-phase-1-storage-boundary.md) 已接受 SQLite 作為 Phase 1 本機開發預設，[Issue #12](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/12) 已合併 observation interface 與 schema。[正式持久化決策矩陣](production-persistence-decision-v0.1.md) 已列出驗收條件，正式排程的持久來源由 [Issue #18](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/18) 追蹤，尚未接受任何外部服務或購買決策。
 - **Phase 0 進度：** Issue #5 已完成並合併。現貨查證確認免費 BFI82U 2004-04-07 的外資列與近期拆分列不同，且早期報表不含鉅額而 FMTQIK 分母包含鉅額；E-Shop 檔案碼／時間版次映射與 CSV 欄位對照仍未知，因此歷史現貨因子暫不得實作。Issue #7 已核實 PCR 的日級欄位與 30 日差限制、TX 1998/2024/2025 年檔及 VIX 日收盤月檔；PCR 全期完整率、TX 其餘年度與 VIX 三年日級匯出仍未知。法人 OI 舊資料供應仍未確認。正式排程儲存仍待 ADR。
 - **程式狀態：** 已有 Phase 1 SQLite observation interface、schema、冪等與 revision 測試，以及已合併的 TAIEX 月查詢 JSON parser／collector；尚沒有外資現貨、TAIFEX 收集器、因子、評分、回測或 Dashboard 實作。
 - **下一個工作包：** 先完成 [Issue #7](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/7) 的 PCR 全期窗口與 TX 其餘年度檔案稽核；VIX 日收盤月檔已可作為日級候選來源，但完整缺值率與三年匯出仍保留未知。完成前不把未驗證來源接入收集器。外資現貨仍須先解決 Issue #5 留下的 BFI82U／FMTQIK 口徑與版次差異。

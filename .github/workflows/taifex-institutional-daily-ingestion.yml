@@ -1,0 +1,50 @@
+name: TAIFEX foreign TX open interest ingestion
+
+on:
+  workflow_dispatch:
+    inputs:
+      write:
+        description: "Persist the validated snapshot to Supabase"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: taifex-institutional-daily-ingestion
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    name: Collect TAIFEX foreign TX open interest
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      WRITE_SNAPSHOT: ${{ inputs.write || false }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify Supabase secret names are available for write mode
+        if: ${{ inputs.write == true }}
+        shell: bash
+        run: |
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SECRET_KEY:-}" ]; then
+            echo "::error::SUPABASE_URL or SUPABASE_SECRET_KEY is empty or unavailable."
+            exit 1
+          fi
+
+      - name: Fetch official snapshot
+        shell: bash
+        run: |
+          args=()
+          if [ "${WRITE_SNAPSHOT:-false}" = "true" ]; then args+=(--write); fi
+          python -m scripts.collect_taifex_institutional "${args[@]}"

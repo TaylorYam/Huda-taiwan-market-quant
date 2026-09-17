@@ -209,3 +209,10 @@ python -m ruff format --check src tests streamlit_app.py
 本專案沿用 GitHub-first 流程：
 
 `Issue → branch → plan → implementation → validation → commit → pull request → review/CI → merge`
+
+## 公開展示部署路線
+
+目前 main 尚未提供 Streamlit 可執行頁面；Dashboard 入口合併後，最快免費展示方案改採
+Streamlit Community Cloud。Vercel 路線保留為未來前端／API 重構選項。
+完整部署欄位、環境變數邊界、smoke check 與 PR #46 合併後 Supabase integration 驗收見
+[公開展示部署 runbook](docs/demo-deployment.md) 與 [ADR 0004](docs/adr/0004-streamlit-demo-hosting.md)。

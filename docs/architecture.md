@@ -178,3 +178,11 @@ Dashboard 只讀取已計算的結果；資料庫寫入由 GitHub Actions 負責
 當資料流、部署方式、核心模型邊界或重要限制發生變更時，應同步更新本文件。
 
 尚未實作的元件及其順序、驗收條件與 GitHub Issue 草案見 [`roadmap-v0.1.md`](roadmap-v0.1.md)。持久儲存、排程資料留存等長期架構選擇仍依 ADR 流程決議，不在此先行指定技術。
+
+### 公開展示路線修訂（2026-09-17）
+
+上文 Vercel 為 ADR 0002 的原始目標；目前 repo 未提供 ASGI／WSGI handler 或前端 build。
+本次展示改採 Streamlit Community Cloud（[ADR 0004](adr/0004-streamlit-demo-hosting.md)），
+待獨立 Dashboard 工作提供 `streamlit_app.py` 後部署。GitHub Actions 與 Supabase 持久化不變；
+首次無憑證 demo 不讀寫 Supabase。驗收、資料唯讀權限與外部操作閘門見
+[部署 runbook](demo-deployment.md)。

@@ -23,6 +23,7 @@ from .engine import (
     calculate_market_score,
     score_market,
 )
+from .persistence import MarketScoreRecord
 from .pipeline import DailyScoreResult, calculate_daily_score
 
 __all__ = [
@@ -38,6 +39,7 @@ __all__ = [
     "FactorScore",
     "MarketDirection",
     "MarketScore",
+    "MarketScoreRecord",
     "aggregate_scores",
     "calculate_daily_score",
     "calculate_factor_score",

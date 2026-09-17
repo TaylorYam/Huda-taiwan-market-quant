@@ -1,0 +1,50 @@
+name: TAIFEX TX daily ingestion
+
+on:
+  workflow_dispatch:
+    inputs:
+      year:
+        description: "Optional TX calendar year to backfill"
+        required: false
+        type: string
+  schedule:
+    - cron: "0 8 * * 1-5"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: taifex-tx-daily-ingestion
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    name: Collect TAIFEX TX daily observations
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      TX_YEAR: ${{ inputs.year || '' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify Supabase secret names are available
+        shell: bash
+        run: |
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SECRET_KEY:-}" ]; then
+            echo "::error::SUPABASE_URL or SUPABASE_SECRET_KEY is empty or unavailable."
+            exit 1
+          fi
+
+      - name: Collect TX year
+        shell: bash
+        run: |
+          args=()
+          if [ -n "${TX_YEAR:-}" ]; then args+=(--year "$TX_YEAR"); fi
+          python -m scripts.collect_taifex_tx "${args[@]}"

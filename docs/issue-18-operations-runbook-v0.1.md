@@ -109,6 +109,8 @@ Supabase Free 不提供可依賴的 managed automatic backup 或 PITR，因此�
 
 現有來源研究已指出，TWSE E-Shop 資料有自動化與使用條款限制，TAIFEX 歷史資料商品也有各自的申購與使用邊界；這些文件中的公開資料探測結果不等於取得付費資料授權。參考 [`data-availability-probe-v0.1.md`](data-availability-probe-v0.1.md) 與 [`phase0-taifex-history-v0.1.md`](phase0-taifex-history-v0.1.md)。
 
+目前新增的 [`taifex-institutional-daily-ingestion.yml`](../.github/workflows/taifex-institutional-daily-ingestion.yml) 只有 `workflow_dispatch`，預設為唯讀探測；只有操作者明確勾選寫入並通過 secret 檢查時才會寫入 Supabase。這個手動入口用於驗證來源與 writer，不代表已啟用無人值守排程；完成下列 gates 前不加入 `schedule`。
+
 ## Release decision record
 
 在 Issue #18 逐項填寫下表。只有所有列為「必須完成」的 gate 都有日期化證據，才可把每日 workflow 改為無人值守。

@@ -1,6 +1,6 @@
 # Phase 1 Storage Interface v0.1
 
-- 狀態：Draft implementation boundary
+- 狀態：Accepted Phase 1 implementation boundary；正式排程持久化待 Issue #18
 - 日期：2026-09-16
 - 追蹤：[Issue #12](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/12)
 
@@ -28,7 +28,7 @@ Phase 1 以 `SQLiteObservationStore` 實作 [ADR 0001](adr/0001-phase-1-storage-
 ## 尚未包含的範圍
 
 - 每次 HTTP retry 的完整 retrieval event（目前先以 `retrieval_count` 與 `last_retrieved_at` 保留最小稽核資訊）。
-- factor results、Market Score、CSV 匯出與正式排程的外部持久化服務。
+- factor results、Market Score、CSV 匯出與正式排程的外部持久化服務（正式持久化由 [Issue #18](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/18) 追蹤）。
 - 原始 payload 內容保存；是否保存由來源授權及後續 Accepted ADR 決定，目前只保存 payload hash 與欄位稽核資訊。
 
 以上項目要在新增資料來源或啟用正式排程前另立 Issue／ADR，不得繞過目前的 observation contract。

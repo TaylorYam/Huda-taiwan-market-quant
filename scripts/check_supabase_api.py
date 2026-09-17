@@ -10,7 +10,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 if str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 
-from src.data import SupabaseRestObservationStore  # noqa: E402
+from src.data import SupabaseRestObservationStore
 
 
 def main() -> None:
@@ -19,8 +19,11 @@ def main() -> None:
     if not project_url or not secret_key:
         raise SystemExit("SUPABASE_URL and SUPABASE_SECRET_KEY are required")
 
-    with SupabaseRestObservationStore(project_url, secret_key):
-        print("Supabase Data API connection succeeded and observations is exposed.")
+    with SupabaseRestObservationStore(project_url, secret_key) as store:
+        store.verify_table("market_scores")
+        print(
+            "Supabase Data API connection succeeded; observations and market_scores are exposed."
+        )
 
 
 if __name__ == "__main__":

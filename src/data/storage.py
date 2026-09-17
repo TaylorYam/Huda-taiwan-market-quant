@@ -401,7 +401,9 @@ def base_identity_fields() -> tuple[str, ...]:
     )
 
 
-def _observation_from_row(row: sqlite3.Row) -> Observation:
+def _observation_from_row(row: Mapping[str, Any]) -> Observation:
+    raw_values = row["values_json"]
+    values = json.loads(raw_values) if isinstance(raw_values, str) else raw_values
     return Observation(
         dataset_id=row["dataset_id"],
         schema_version=row["schema_version"],
@@ -419,7 +421,7 @@ def _observation_from_row(row: sqlite3.Row) -> Observation:
         supersedes_id=row["supersedes_id"],
         source_payload_hash=row["source_payload_hash"],
         parser_version=row["parser_version"],
-        values=json.loads(row["values_json"]),
+        values=values,
         quality_status=row["quality_status"],
         quality_notes=row["quality_notes"],
     )

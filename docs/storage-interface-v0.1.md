@@ -1,10 +1,12 @@
 # Phase 1 Storage Interface v0.1
 
-- 狀態：Accepted Phase 1 implementation boundary；正式排程持久化待 Issue #18
+- 狀態：Accepted Phase 1 implementation boundary；免費 MVP 持久化堆疊已由 [ADR 0002](adr/0002-free-tier-mvp-stack.md) 選定，Data API 傳輸由 [ADR 0003](adr/0003-supabase-data-api-transport.md) 選定，SQLite、PostgreSQL 與 Supabase REST adapter 已建立
 - 日期：2026-09-16
 - 追蹤：[Issue #12](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/12)
 
-Phase 1 以 `SQLiteObservationStore` 實作 [ADR 0001](adr/0001-phase-1-storage-boundary.md) 的本機開發邊界。收集器與因子層只依賴 `ObservationStore` 介面及 `Observation` 信封，不直接組 SQL 或管理 SQLite connection。
+Phase 1 以 `SQLiteObservationStore` 實作 [ADR 0001](adr/0001-phase-1-storage-boundary.md) 的本機開發邊界；免費 MVP 提供 `SupabaseRestObservationStore`，使用 `SUPABASE_URL` 與 server-side `SUPABASE_SECRET_KEY` 呼叫 Data API，不需要 `MARKET_DB_URL`。`PostgresObservationStore` 仍保留作為直接 PostgreSQL 連線的後續選項。收集器與因子層只依賴 `ObservationStore` 介面及 `Observation` 信封，不直接組 SQL 或管理資料庫 connection。PostgreSQL 初始 schema 位於 [`src/data/sql/001_observations.sql`](../src/data/sql/001_observations.sql)，需先在 Supabase SQL Editor 執行一次。
+
+Data API 驗證由 [`scripts/check_supabase_api.py`](../scripts/check_supabase_api.py) 執行；GitHub Actions 的手動 workflow [`supabase-api-smoke.yml`](../.github/workflows/supabase-api-smoke.yml) 使用 `SUPABASE_URL` 與 `SUPABASE_SECRET_KEY`，只確認 `observations` table 已可存取，不寫入市場觀察資料。
 
 ## Observation 信封
 
@@ -28,7 +30,7 @@ Phase 1 以 `SQLiteObservationStore` 實作 [ADR 0001](adr/0001-phase-1-storage-
 ## 尚未包含的範圍
 
 - 每次 HTTP retry 的完整 retrieval event（目前先以 `retrieval_count` 與 `last_retrieved_at` 保留最小稽核資訊）。
-- factor results、Market Score、CSV 匯出與正式排程的外部持久化服務（正式持久化由 [Issue #18](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/18) 追蹤）。
+- factor results、Market Score、CSV 匯出與正式排程的外部持久化服務（MVP 採 Supabase Free PostgreSQL + Data API，實作與驗證由 [Issue #18](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/18) 追蹤）。
 - 原始 payload 內容保存；是否保存由來源授權及後續 Accepted ADR 決定，目前只保存 payload hash 與欄位稽核資訊。
 
 以上項目要在新增資料來源或啟用正式排程前另立 Issue／ADR，不得繞過目前的 observation contract。

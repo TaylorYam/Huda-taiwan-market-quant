@@ -51,7 +51,7 @@ jobs:
           cache: pip
 
       - name: Install validation dependencies
-        run: python -m pip install --upgrade pip pytest ruff
+        run: python -m pip install --upgrade pip pytest ruff requests
 
       - name: Run Ruff lint
         run: ruff check src tests

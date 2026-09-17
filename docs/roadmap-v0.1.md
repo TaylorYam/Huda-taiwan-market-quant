@@ -34,7 +34,7 @@
 
 1. **決定外資現貨因子的來源口徑。** v0.1 公式使用買賣超金額除以市場成交金額。[Issue #5 查證](phase0-cash-factor-source-verification-v0.1.md)確認免費 BFI82U 的早期與近期報表在鉅額交易及外資分類上有差異，並未找到 E-Shop 檔案碼與 14:50／19:40 版次的官方對應。現貨因子歷史實作仍阻擋在版本定義；不得拼接異質序列或以股數靜默替代金額。
 2. **補完歷史窗口探測。** PCR 日期表單已驗證上市初期、休市日附近與最新區段，UI 的起訖日期差上限為 30 個曆日；全期約 292 段尚未遍歷。TX 年檔選單列 1998–2025，已全檔稽核 1998、2024、2025 三份；其他年度及 1998 交易日曆仍未驗證。VIX 日收盤月檔與 2026-09-15 日列已核實，免費窗口為當月與前三個完整月份；任意日期 endpoint 與三年圖表匯出仍未知。法人 OI 公開頁僅能查近三年，舊資料走申請路徑。詳見[TAIFEX 歷史窗口補查](phase0-taifex-history-v0.1.md)。
-3. **定義資料契約及保存方式。** [`data-contract-v0.1.md`](data-contract-v0.1.md) 已建立邏輯欄位、日期時區、單位、契約、盤別、發布時間、來源、修訂與缺值語義；[ADR 0001](adr/0001-phase-1-storage-boundary.md) 已確認 Phase 1 單機開發使用 Git 忽略的 SQLite，介面與 schema 見 [Storage Interface](storage-interface-v0.1.md)。正式排程的持久來源、保留期與存取方式仍須另立 Accepted ADR。
+3. **定義資料契約及保存方式。** [`data-contract-v0.1.md`](data-contract-v0.1.md) 已建立邏輯欄位、日期時區、單位、契約、盤別、發布時間、來源、修訂與缺值語義；[ADR 0001](adr/0001-phase-1-storage-boundary.md) 已確認 Phase 1 單機開發使用 Git 忽略的 SQLite，介面與 schema 見 [Storage Interface](storage-interface-v0.1.md)。免費 MVP 的正式持久來源、部署層與升級邊界已由 [ADR 0002](adr/0002-free-tier-mvp-stack.md) 選定，Supabase Data API 傳輸由 [ADR 0003](adr/0003-supabase-data-api-transport.md) 選定，正式每日流程仍須完成備份、還原、權限與配額驗證。
 4. **寫明仍未封口的模型邊界。** 尚包括 PCR 的百分位方向、Basis 的近月及轉倉規則、VIX 的 1 年或 3 年百分位，以及必要因子缺值時總分應為 unavailable；這些決定要在因子／評分實作之前進模型規格或 ADR。Market Score 區間端點已在 [Factor Model v0.1](factor-model-v0.1.md) 與 [Backtest Spec v0.1](backtest-spec-v0.1.md) 明定。
 
 **Phase 0 完成條件：** 核心欄位及單位已定義；每個必要資料源有可重現的最新查詢方式與已驗證的歷史下界；付費項目與授權限制標示清楚；模型邊界決策已記錄；未知項目不再被當成已確認假設。
@@ -105,7 +105,7 @@
 ## 目前狀態
 
 - **已完成文件基礎：** 目標／架構、factor model、data window policy、backtest spec、第一輪 data availability probe。
-- **儲存方案與介面：** 已比較本機 SQLite、CSV／Parquet、Git、Actions artifacts 與外部持久服務；[ADR 0001](adr/0001-phase-1-storage-boundary.md) 已接受 SQLite 作為 Phase 1 本機開發預設，[Issue #12](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/12) 已合併 observation interface 與 schema。[正式持久化決策矩陣](production-persistence-decision-v0.1.md) 已列出驗收條件，正式排程的持久來源由 [Issue #18](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/18) 追蹤，尚未接受任何外部服務或購買決策。
+- **儲存方案與介面：** 已比較本機 SQLite、CSV／Parquet、Git、Actions artifacts 與外部持久服務；[ADR 0001](adr/0001-phase-1-storage-boundary.md) 已接受 SQLite 作為 Phase 1 本機開發預設，[Issue #12](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/12) 已合併 observation interface 與 schema。[正式持久化決策矩陣](production-persistence-decision-v0.1.md) 已列出驗收條件，[ADR 0002](adr/0002-free-tier-mvp-stack.md) 已選定 Supabase Free PostgreSQL、GitHub Actions 與 Vercel Hobby，[ADR 0003](adr/0003-supabase-data-api-transport.md) 已選定 Data API 傳輸；[Issue #18](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/18) 追蹤實作前的驗證工作。
 - **Phase 0 進度：** Issue #5 已完成並合併。現貨查證確認免費 BFI82U 2004-04-07 的外資列與近期拆分列不同，且早期報表不含鉅額而 FMTQIK 分母包含鉅額；E-Shop 檔案碼／時間版次映射與 CSV 欄位對照仍未知，因此歷史現貨因子暫不得實作。Issue #7 已核實 PCR 的日級欄位與 30 日差限制、TX 1998/2024/2025 年檔及 VIX 日收盤月檔；PCR 全期完整率、TX 其餘年度與 VIX 三年日級匯出仍未知。法人 OI 舊資料供應仍未確認。正式排程儲存仍待 ADR。
 - **程式狀態：** 已有 Phase 1 SQLite observation interface、schema、冪等與 revision 測試，以及已合併的 TAIEX 月查詢 JSON parser／collector；尚沒有外資現貨、TAIFEX 收集器、因子、評分、回測或 Dashboard 實作。
 - **下一個工作包：** 先完成 [Issue #7](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/7) 的 PCR 全期窗口與 TX 其餘年度檔案稽核；VIX 日收盤月檔已可作為日級候選來源，但完整缺值率與三年匯出仍保留未知。完成前不把未驗證來源接入收集器。外資現貨仍須先解決 Issue #5 留下的 BFI82U／FMTQIK 口徑與版次差異。

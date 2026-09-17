@@ -1,5 +1,6 @@
 """Source adapters and normalized market observations."""
 
+from .postgres import PostgresObservationStore
 from .storage import (
     QUALITY_STATUSES,
     Observation,
@@ -7,6 +8,7 @@ from .storage import (
     SQLiteObservationStore,
     WriteResult,
 )
+from .supabase_rest import SupabaseRestObservationStore
 from .twse_taiex import (
     TAIEX_DATASET_ID,
     TAIEX_ENDPOINT,
@@ -25,7 +27,9 @@ __all__ = [
     "TAIEX_ENDPOINT",
     "Observation",
     "ObservationStore",
+    "PostgresObservationStore",
     "SQLiteObservationStore",
+    "SupabaseRestObservationStore",
     "TAIEXFetchError",
     "TAIEXParseError",
     "WriteResult",

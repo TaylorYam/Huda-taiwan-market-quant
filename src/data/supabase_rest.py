@@ -103,6 +103,47 @@ class SupabaseRestObservationStore:
         rows = self._request("GET", "/observations", params=params)
         return [_observation_from_row(row) for row in rows]
 
+    def load_score_observations(
+        self, *, dataset_ids: Sequence[str], target_date: str, as_of: str
+    ) -> list[Observation]:
+        """Read every eligible row, even when the API caps each response.
+
+        Keyset pagination terminates only on an empty page, not a short page.
+        The ingestion boundary prevents later backfills entering a replay.
+        """
+        from datetime import date
+
+        date.fromisoformat(target_date)
+        _parse_timestamp(as_of, "as_of")
+        if not dataset_ids or any(
+            re.fullmatch(r"[A-Za-z0-9_.-]+", name) is None for name in dataset_ids
+        ):
+            raise ValueError("dataset_ids must contain valid identifiers")
+        result: list[Observation] = []
+        cursor = 0
+        while True:
+            rows = self._request(
+                "GET",
+                "/observations",
+                params={
+                    "select": "*",
+                    "dataset_id": f"in.({','.join(dataset_ids)})",
+                    "observation_date": f"lte.{target_date}",
+                    "ingested_at": f"lte.{as_of}",
+                    "retrieved_at": f"lte.{as_of}",
+                    "id": f"gt.{cursor}",
+                    "order": "id.asc",
+                    "limit": "1000",
+                },
+            )
+            if not rows:
+                return result
+            ids = [int(row["id"]) for row in rows]
+            if ids != sorted(set(ids)) or ids[0] <= cursor:
+                raise RuntimeError("Observation pagination did not advance")
+            result.extend(_observation_from_row(row) for row in rows)
+            cursor = ids[-1]
+
     def write_market_score(self, record: Mapping[str, Any]) -> MarketScoreWriteResult:
         """Insert one derived result or return duplicate for the same hash."""
 

@@ -112,9 +112,7 @@ class PostgresObservationStore:
                     latest_retrieved_at = (
                         observation.retrieved_at
                         if _parse_timestamp(observation.retrieved_at, "retrieved_at")
-                        > _parse_timestamp(
-                            previous_retrieved_at, "last_retrieved_at"
-                        )
+                        > _parse_timestamp(previous_retrieved_at, "last_retrieved_at")
                         else previous_retrieved_at
                     )
                     cursor.execute(
@@ -164,8 +162,13 @@ class PostgresObservationStore:
                     )
                     prior = cursor.fetchone()
                     if prior is None:
-                        raise ValueError("supersedes_id does not reference an observation")
-                    if tuple(prior[field] for field in base_identity_fields()) != base_identity:
+                        raise ValueError(
+                            "supersedes_id does not reference an observation"
+                        )
+                    if (
+                        tuple(prior[field] for field in base_identity_fields())
+                        != base_identity
+                    ):
                         raise ValueError(
                             "supersedes_id must reference the same observation identity"
                         )
@@ -218,7 +221,9 @@ class PostgresObservationStore:
 
     def get_observation(self, observation_id: int) -> Observation | None:
         with self._connection.cursor() as cursor:
-            cursor.execute("SELECT * FROM observations WHERE id = %s", (observation_id,))
+            cursor.execute(
+                "SELECT * FROM observations WHERE id = %s", (observation_id,)
+            )
             row = cursor.fetchone()
         return None if row is None else _observation_from_row(row)
 

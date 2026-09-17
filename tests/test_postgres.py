@@ -48,5 +48,8 @@ def test_postgres_store_loads_shared_observation_schema_without_driver() -> None
         pass
 
     assert connection.commit_count == 1
-    assert "CREATE TABLE IF NOT EXISTS observations" in connection.cursor_instance.statements[0]
+    assert (
+        "CREATE TABLE IF NOT EXISTS observations"
+        in connection.cursor_instance.statements[0]
+    )
     assert "JSONB NOT NULL" in connection.cursor_instance.statements[0]

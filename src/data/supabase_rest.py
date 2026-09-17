@@ -98,10 +98,7 @@ class SupabaseRestObservationStore:
             )
             return WriteResult(existing["id"], "duplicate")
 
-        base_identity = {
-            key: identity[key]
-            for key in base_identity_fields()
-        }
+        base_identity = {key: identity[key] for key in base_identity_fields()}
         prior_rows = self._select(base_identity, "id")
         if prior_rows and observation.supersedes_id is None:
             raise ValueError(

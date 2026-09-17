@@ -3,6 +3,7 @@ numpy
 pandas
 requests
 streamlit
+psycopg[binary]>=3.2,<4
 
 # Development and validation
 pytest

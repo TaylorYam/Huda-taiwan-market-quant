@@ -1,10 +1,10 @@
 # Phase 1 Storage Interface v0.1
 
-- 狀態：Accepted Phase 1 implementation boundary；免費 MVP 持久化堆疊已由 [ADR 0002](adr/0002-free-tier-mvp-stack.md) 選定，實作與驗證由 Issue #18 追蹤
+- 狀態：Accepted Phase 1 implementation boundary；免費 MVP 持久化堆疊已由 [ADR 0002](adr/0002-free-tier-mvp-stack.md) 選定，SQLite 與 PostgreSQL adapter 已建立，實作與驗證由 Issue #18 追蹤
 - 日期：2026-09-16
 - 追蹤：[Issue #12](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/12)
 
-Phase 1 以 `SQLiteObservationStore` 實作 [ADR 0001](adr/0001-phase-1-storage-boundary.md) 的本機開發邊界。收集器與因子層只依賴 `ObservationStore` 介面及 `Observation` 信封，不直接組 SQL 或管理 SQLite connection。
+Phase 1 以 `SQLiteObservationStore` 實作 [ADR 0001](adr/0001-phase-1-storage-boundary.md) 的本機開發邊界；免費 MVP 另提供 `PostgresObservationStore`，連線字串由 `MARKET_DB_URL` 提供。收集器與因子層只依賴 `ObservationStore` 介面及 `Observation` 信封，不直接組 SQL 或管理資料庫 connection。PostgreSQL 初始 schema 位於 [`src/data/sql/001_observations.sql`](../src/data/sql/001_observations.sql)，adapter 初始化時可重複套用。
 
 ## Observation 信封
 

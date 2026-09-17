@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import replace
 from datetime import date, datetime, timezone
 from typing import Any
 from urllib.error import URLError
@@ -169,7 +170,13 @@ def collect_taiex_month(
         http_get=http_get,
         parser_version=parser_version,
     )
-    return [store.write_observation(observation) for observation in observations]
+    results: list[WriteResult] = []
+    for observation in observations:
+        previous_id = _latest_observation_id(store, observation)
+        if previous_id is not None:
+            observation = replace(observation, supersedes_id=previous_id)
+        results.append(store.write_observation(observation))
+    return results
 
 
 def collect_taiex_range(
@@ -195,6 +202,46 @@ def collect_taiex_range(
             )
         )
     return results
+
+
+def _latest_observation_id(
+    store: ObservationStore, observation: Observation
+) -> int | None:
+    """Find the latest row for a TAIEX logical identity before writing."""
+
+    connection = getattr(store, "_connection", None)
+    if connection is not None:
+        row = connection.execute(
+            """
+            SELECT id FROM observations
+            WHERE dataset_id = ? AND observation_date = ?
+              AND source_record_key = ?
+              AND IFNULL(publication_label, '') = IFNULL(?, '')
+            ORDER BY id DESC LIMIT 1
+            """,
+            (
+                observation.dataset_id,
+                observation.observation_date,
+                observation.source_record_key,
+                observation.publication_label,
+            ),
+        ).fetchone()
+        return None if row is None else int(row[0])
+
+    select = getattr(store, "_select", None)
+    if callable(select):
+        rows = select(
+            {
+                "dataset_id": observation.dataset_id,
+                "observation_date": observation.observation_date,
+                "source_record_key": observation.source_record_key,
+                "publication_label": observation.publication_label,
+            },
+            "id",
+        )
+        if rows:
+            return max(int(row["id"]) for row in rows)
+    return None
 
 
 def _field_indexes(fields: Sequence[Any]) -> dict[str, int]:

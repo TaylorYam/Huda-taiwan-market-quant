@@ -35,6 +35,12 @@ Issue #18 可引用的既有證據為 [run 35191715728](https://github.com/Taylo
 - GitHub repository secret names 目前為 `SUPABASE_URL`、`SUPABASE_SECRET_KEY` 與 `MARKET_DB_URL`；所有 `.github/workflows/` 的正式 writer 都只引用前兩者，`MARKET_DB_URL` 沒有 workflow 引用，但 repository 仍保留手動 PostgreSQL 檢查腳本的支援，是否撤銷交由 owner 決定。
 - Supabase SQL 檢查確認 `public.observations` 與 `public.market_scores` 都已啟用 RLS，且目前沒有 public policy。server-side `SUPABASE_SECRET_KEY` 的 API smoke 已通過；Dashboard 的獨立 publishable／read-only credential 尚未建立，因此 access separation gate 不宣稱完成。
 
+### Source terms snapshot（2026-09-17，Asia/Taipei）
+
+- [TWSE 網路資訊商店使用條款](https://eshop.twse.com.tw/zh/home/terms) 禁止未經同意以自動化裝置、指令碼、爬蟲或擷取程式下載資料；內容的使用、重製、散布及轉載另要求事前書面同意，引用時須標示來源並保持完整性。以目前條款文字，TWSE endpoint 的自動保存、備份與 Dashboard 再散布仍未取得明確授權。
+- [TAIFEX 網站使用條款](https://www.taifex.com.tw/cht/edu/userTerms) 將網站內容與資料列為受智慧財產權保護，重製、改作、散布或公開發表原則上需事前書面同意；政府資料開放平台授權的資料另有例外。直接使用交易資訊仍須對照[交易資訊使用管理辦法及契約](https://www.taifex.com.tw/cht/6/iTRule)的適用範圍與授權條件。
+- 結論：本次只完成條款定位與限制摘錄，尚未把任何來源標為 `allowed`；TWSE、TAIFEX 的自動下載、內部 Dashboard、備份與再散布邊界均維持 `unresolved`，需 owner 取得 endpoint／產品層級的書面確認後再更新 gate。
+
 ### 仍需手動完成
 
 | Gate | 完成條件 | 證據應保存在哪裡 |
@@ -141,7 +147,7 @@ Supabase Free 不提供可依賴的 managed automatic backup 或 PITR，因此�
 | Actions writer / Dashboard reader separation | 部分驗證 | 2026-09-17（Asia/Taipei） | Secrets 名稱與 RLS 已盤點；server-side smoke 通過，Dashboard 獨立唯讀 credential 尚待建立 |
 | Secret rotation | 待手動 |  | rotation date、old key revoked、smoke run |
 | Supabase / Actions quota snapshot | 部分驗證 | 2026-09-17（Asia/Taipei） | Supabase usage：24.96 MB／500 MB（5%）；Actions billing 尚待核准 scope 後補記 |
-| TWSE / TAIFEX source terms | 待手動 |  | 條款 URL、查核日期、限制與結論 |
+| TWSE / TAIFEX source terms | 未解決 | 2026-09-17（Asia/Taipei） | [TWSE 條款](https://eshop.twse.com.tw/zh/home/terms)、[TAIFEX 條款](https://www.taifex.com.tw/cht/edu/userTerms)；自動下載與再散布仍待書面確認 |
 
 ### 不通過時的處置
 

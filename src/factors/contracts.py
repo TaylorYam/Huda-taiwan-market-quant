@@ -24,6 +24,7 @@ TAIEX_DATASET_ID = "twse_taiex_daily_v1"
 PCR_DATASET_ID = "taifex_txo_oi_pcr_v1"
 TX_DATASET_ID = "taifex_tx_daily_contract_v1"
 VIX_DATASET_ID = "taifex_taiwan_vix_close_v1"
+INSTITUTIONAL_FUTURES_DATASET_ID = "taifex_institutional_futures_oi_v1"
 
 TREND_FACTOR_ID = "taiex_ma20_ma60_trend"
 MOMENTUM_FACTOR_ID = "taiex_20d_momentum"
@@ -253,6 +254,7 @@ def adapt_tx_inputs(
     taiex_observations: Sequence[ObservationLike],
     target_date: date | str,
     *,
+    institutional_observations: Sequence[ObservationLike] | None = None,
     as_of: date | datetime | str | None = None,
     as_of_policy: AsOfPolicy = "observation_date",
 ) -> dict[str, FactorInput]:
@@ -278,20 +280,28 @@ def adapt_tx_inputs(
         as_of=as_of,
         as_of_policy=as_of_policy,
     )
-    result = {
-        FOREIGN_TX_POSITION_FACTOR_ID: _unavailable(
-            FOREIGN_TX_POSITION_FACTOR_ID,
+    if institutional_observations:
+        result = _adapt_institutional_futures_inputs(
+            institutional_observations,
             target,
-            as_of,
-            "foreign_investor_TX_OI_source_unavailable",
-        ),
-        FOREIGN_TX_CHANGE_FACTOR_ID: _unavailable(
-            FOREIGN_TX_CHANGE_FACTOR_ID,
-            target,
-            as_of,
-            "foreign_investor_TX_OI_source_unavailable",
-        ),
-    }
+            as_of=as_of,
+            as_of_policy=as_of_policy,
+        )
+    else:
+        result = {
+            FOREIGN_TX_POSITION_FACTOR_ID: _unavailable(
+                FOREIGN_TX_POSITION_FACTOR_ID,
+                target,
+                as_of,
+                "foreign_investor_TX_OI_source_unavailable",
+            ),
+            FOREIGN_TX_CHANGE_FACTOR_ID: _unavailable(
+                FOREIGN_TX_CHANGE_FACTOR_ID,
+                target,
+                as_of,
+                "foreign_investor_TX_OI_source_unavailable",
+            ),
+        }
     tx_observation = _select_front_tx(tx_selected, target)
     spot_observation = spot_selected.get(target)
     tx_close = _number(tx_observation, "close") if tx_observation else None
@@ -372,6 +382,7 @@ def adapt_v01_inputs(
     pcr_observations: Sequence[ObservationLike],
     tx_observations: Sequence[ObservationLike],
     vix_observations: Sequence[ObservationLike],
+    institutional_observations: Sequence[ObservationLike] | None = None,
     target_date: date | str,
     as_of: date | datetime | str | None = None,
     as_of_policy: AsOfPolicy = "observation_date",
@@ -405,6 +416,7 @@ def adapt_v01_inputs(
             tx_observations,
             taiex_observations,
             target_date,
+            institutional_observations=institutional_observations,
             as_of=as_of,
             as_of_policy=as_of_policy,
         )
@@ -573,6 +585,100 @@ def _select_front_tx(
     return min(parsed, key=lambda row: row[0])[1]
 
 
+def _adapt_institutional_futures_inputs(
+    observations: Sequence[ObservationLike],
+    target: date,
+    *,
+    as_of: date | datetime | str | None,
+    as_of_policy: AsOfPolicy,
+) -> dict[str, FactorInput]:
+    """Build foreign TX OI and its five-trading-day change when available."""
+
+    selected = _daily_observations(
+        observations,
+        dataset_id=INSTITUTIONAL_FUTURES_DATASET_ID,
+        target_date=target,
+        as_of=as_of,
+        as_of_policy=as_of_policy,
+    )
+    rows = sorted(selected.items(), key=lambda item: item[0])
+    latest = selected.get(target)
+    if latest is None:
+        reason = _missing_reason(
+            observations, INSTITUTIONAL_FUTURES_DATASET_ID, target, as_of
+        )
+        return {
+            FOREIGN_TX_POSITION_FACTOR_ID: _unavailable(
+                FOREIGN_TX_POSITION_FACTOR_ID, target, as_of, reason
+            ),
+            FOREIGN_TX_CHANGE_FACTOR_ID: _unavailable(
+                FOREIGN_TX_CHANGE_FACTOR_ID, target, as_of, reason
+            ),
+        }
+    net = _number(latest, "open_interest_net")
+    identity = (observation_identity(latest),)
+    if net is None:
+        unavailable = "foreign_TX_OI_net_unavailable"
+        return {
+            FOREIGN_TX_POSITION_FACTOR_ID: _unavailable(
+                FOREIGN_TX_POSITION_FACTOR_ID, target, as_of, unavailable, identity
+            ),
+            FOREIGN_TX_CHANGE_FACTOR_ID: _unavailable(
+                FOREIGN_TX_CHANGE_FACTOR_ID, target, as_of, unavailable, identity
+            ),
+        }
+
+    position = FactorInput(
+        factor_id=FOREIGN_TX_POSITION_FACTOR_ID,
+        observation_date=target.isoformat(),
+        status=FACTOR_AVAILABLE,
+        value=net,
+        values={"open_interest_net": net},
+        observation_identities=identity,
+        as_of=_as_of_text(as_of),
+        window_start=target.isoformat(),
+        window_end=target.isoformat(),
+    )
+    if len(rows) < 6:
+        change = _warm_up(
+            FOREIGN_TX_CHANGE_FACTOR_ID,
+            target,
+            as_of,
+            reason="requires_6_available_foreign_TX_OI_observations",
+            identities=tuple(observation_identity(row) for _, row in rows),
+            window_start=rows[0][0] if rows else None,
+        )
+    else:
+        prior_date, prior = rows[-6]
+        prior_net = _number(prior, "open_interest_net")
+        if prior_net is None:
+            change = _unavailable(
+                FOREIGN_TX_CHANGE_FACTOR_ID,
+                target,
+                as_of,
+                "foreign_TX_OI_prior_net_unavailable",
+                tuple(observation_identity(row) for _, row in rows[-6:]),
+            )
+        else:
+            change = FactorInput(
+                factor_id=FOREIGN_TX_CHANGE_FACTOR_ID,
+                observation_date=target.isoformat(),
+                status=FACTOR_AVAILABLE,
+                value=net - prior_net,
+                values={"current_net": net, "prior_net": prior_net},
+                observation_identities=tuple(
+                    observation_identity(row) for _, row in rows[-6:]
+                ),
+                as_of=_as_of_text(as_of),
+                window_start=prior_date.isoformat(),
+                window_end=target.isoformat(),
+            )
+    return {
+        FOREIGN_TX_POSITION_FACTOR_ID: position,
+        FOREIGN_TX_CHANGE_FACTOR_ID: change,
+    }
+
+
 def _missing_reason(
     observations: Sequence[ObservationLike],
     dataset_id: str,
@@ -639,6 +745,7 @@ __all__ = [
     "FOREIGN_CASH_FACTOR_ID",
     "FOREIGN_TX_CHANGE_FACTOR_ID",
     "FOREIGN_TX_POSITION_FACTOR_ID",
+    "INSTITUTIONAL_FUTURES_DATASET_ID",
     "MOMENTUM_FACTOR_ID",
     "PCR_FACTOR_ID",
     "TREND_FACTOR_ID",

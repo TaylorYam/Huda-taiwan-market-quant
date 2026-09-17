@@ -11,7 +11,7 @@
 | TXO PCR | 官方日期表單 POST 可按日期下載；完整分段稽核已覆蓋 2001-12-24 至 2026-09-17：292 段、6,090 列、6,090 個唯一日期、0 錯誤、0 重複；最新資料日為 2026-09-16。 | 起訖日期相差最多 30 個曆日且兩端包含（每段最多 31 個曆日）。本次已確認來源窗口連續回應且日期不重複，但尚未用完整官方交易日曆逐日判定所有無資料日的原因。 |
 | TX 年行情 | 官方年度選單列出 1998–2025 共 28 年；完整稽核 28 份 ZIP 共 84,828 筆 TX 列、6,819 個年度日期、0 個年度內重複鍵，所有年度每個 TX 日期都有正成交量列。1998 首末資料日為 1998-07-21–12-31；2025 最新年檔為 2025-01-02–12-31。 | 全檔稽核確認 CP950 解析、年度首末日與 schema 轉換；1998 官方歷史交易日曆仍未取得，因此不能只靠檔案判定逐日缺漏，也不能把年度日期數直接當成交易日曆。 |
 | Taiwan VIX 日收盤 | 免費每日收盤頁顯示 2026/06–09 月份；月檔 `202609new.txt` 實測含 2026-09-15 日列，VIX 收盤 27.29、收盤前 1 分鐘平均 27.29。指數專區「3年」圖表實測窗口為 2023-09-16 至 2026-09-15。 | 免費日收盤 payload 已確認為月度 tab-separated 純文字；任意日期下載 endpoint、CSV 格式與三年圖表匯出仍未知。付費歷史商品另列，不視為免費資料。 |
-| 三大法人期貨 OI | 官方「區分各期貨契約－依日期」頁註明資料起日 2008-04-07，且自 2012-05-01 起只供查詢日前三年。 | 超出公開查詢窗口的舊資料走「公開資料申購表」／TAIFEX E-Data Shop 歷史資料路徑；本次未申請、未購買、未驗證交付檔。 |
+| 三大法人期貨 OI | 官方「區分各期貨契約－依日期」頁註明資料起日 2008-04-07，且自 2012-05-01 起只供查詢日前三年。2026-09-17 實測 OpenAPI 最新 JSON 快照，欄位含 `Date`、`ContractCode`、`Item`、`OpenInterest(Long/Short/Net)`；篩選 `臺股期貨`／`外資及陸資` 後，2026-09-16 淨未平倉為 -76,351 口。 | 超出公開查詢窗口的舊資料走「公開資料申購表」／TAIFEX E-Data Shop 歷史資料路徑；OpenAPI 沒有日期參數，只能自現在起逐日保存，不能直接回填舊日；本次未申請、未購買、未驗證交付檔。 |
 
 ## PCR：日期回補入口、窗口限制與抽樣
 
@@ -97,6 +97,8 @@ TAIFEX [交易歷史資料申請頁](https://www.taifex.com.tw/cht/3/hisAppForm)
 
 也嘗試在依日期下載頁送出 2008-04-07 單日查詢，但沒有取得 CSV 下載或可讀的錯誤訊息；因此不把該次嘗試當成對舊日伺服器行為的實測結論。三年窗口與申購路徑的判斷來自該頁明載的官方註記及官方申請頁。
 
+2026-09-17 另以官方 OpenAPI 端點 [`MarketDataOfMajorInstitutionalTradersDetailsOfFuturesContractsBytheDate`](https://openapi.taifex.com.tw/v1/MarketDataOfMajorInstitutionalTradersDetailsOfFuturesContractsBytheDate) 直接實測 JSON。回應是最新快照，沒有日期查詢參數；以 `ContractCode=臺股期貨`、`Item=外資及陸資` 篩選後，2026-09-16 列的 `OpenInterest(Net)` 為 `-76351`。欄位同時提供多空未平倉口數與淨交易量，足以支援每日增量保存及 5 日變化因子。這個端點不提供歷史回補，因此正式 collector 只在每個交易日保存快照、記錄 `source_date`／`retrieved_at`，重跑時以來源內容去重並保留修訂 lineage；歷史三年以前仍需申請或購買官方檔案。
+
 ## Taiwan VIX：免費日收盤窗口與歷史商品需分開
 
 [TAIFEX 前 3 個月每日收盤 VIX 頁](https://www.taifex.com.tw/cht/7/vixDaily3MNew) 的免費頁面月份列表實測可見 2026/06、07、08、09。月份檔可由下載連結重現，例如 [`202609new.txt`](https://www.taifex.com.tw/file/taifex/Dailydownload/vix/log2data/202609new.txt)；檔案是含標頭與分隔線的 tab-separated 純文字，資料列實際以七欄對齊，日期／時間在前兩欄、VIX 收盤在第五欄、收盤前 1 分鐘平均在第七欄。2026-09-15 日列的有效欄位為 `20260915`、`13450000`、`27.29`、`27.29`，因此日收盤 VIX 已直接驗證為 27.29。
@@ -133,6 +135,7 @@ TAIFEX [E-Data Shop VIX 新版歷史商品](https://edatashop.taifex.com.tw/zh/p
 - [TAIFEX 2024/10/02–03 山陀兒颱風休市公告](https://www.taifex.com.tw/cht/11/newsDetail.do?idx=15394&thetype=2)
 - [TAIFEX 2024/10/31 康芮颱風休市公告](https://www.taifex.com.tw/cht/11/newsDetail?idx=15446&newsType=1)
 - [TAIFEX 期貨三大法人 OI 依日期查詢、資料窗口註記](https://www.taifex.com.tw/cht/3/futContractsDateView)
+- [TAIFEX OpenAPI：三大法人期貨契約日資料](https://openapi.taifex.com.tw/v1/MarketDataOfMajorInstitutionalTradersDetailsOfFuturesContractsBytheDate)
 - [TAIFEX 交易歷史資料申請（含期貨三大法人資料）](https://www.taifex.com.tw/cht/3/hisAppForm)
 - [TAIFEX E-Data Shop](https://edatashop.taifex.com.tw/)
 - [TAIFEX VIX 前 3 個月每日收盤頁](https://www.taifex.com.tw/cht/7/vixDaily3MNew)

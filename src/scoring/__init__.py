@@ -25,6 +25,7 @@ from .engine import (
 )
 from .persistence import MarketScoreRecord
 from .pipeline import DailyScoreResult, calculate_daily_score
+from .writer import MarketScoreWriter, persist_market_score
 
 __all__ = [
     "BEAR",
@@ -40,12 +41,14 @@ __all__ = [
     "MarketDirection",
     "MarketScore",
     "MarketScoreRecord",
+    "MarketScoreWriter",
     "aggregate_scores",
     "calculate_daily_score",
     "calculate_factor_score",
     "calculate_market_score",
     "classify_score",
     "market_direction",
+    "persist_market_score",
     "score_bucket",
     "score_factor",
     "score_market",

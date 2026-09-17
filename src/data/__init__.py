@@ -8,7 +8,7 @@ from .storage import (
     SQLiteObservationStore,
     WriteResult,
 )
-from .supabase_rest import SupabaseRestObservationStore
+from .supabase_rest import MarketScoreWriteResult, SupabaseRestObservationStore
 from .taiex_pipeline import (
     TAIWAN_TIMEZONE,
     current_taiwan_month,
@@ -101,6 +101,7 @@ __all__ = [
     "VIX_DATASET_ID",
     "VIX_ENDPOINT",
     "VIX_PARSER_VERSION",
+    "MarketScoreWriteResult",
     "Observation",
     "ObservationStore",
     "PCRFetchError",

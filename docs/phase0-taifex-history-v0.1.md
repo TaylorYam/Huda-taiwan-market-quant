@@ -99,13 +99,15 @@ TAIFEX [交易歷史資料申請頁](https://www.taifex.com.tw/cht/3/hisAppForm)
 
 ## Taiwan VIX：免費日收盤窗口與歷史商品需分開
 
-[TAIFEX 前 3 個月每日收盤 VIX 頁](https://www.taifex.com.tw/cht/7/vixDaily3MNew) 的免費頁面月份列表實測可見 2026/06、07、08、09。月份檔可由下載連結重現，例如 [`202609new.txt`](https://www.taifex.com.tw/file/taifex/Dailydownload/vix/log2data/202609new.txt)；檔案是 tab-separated 純文字，日列欄位為交易日期、時間、VIX、收盤前 1 分鐘平均。2026-09-15 日列為 `20260915  13450000  27.29  27.29`，因此日收盤 VIX 已直接驗證為 27.29。
+[TAIFEX 前 3 個月每日收盤 VIX 頁](https://www.taifex.com.tw/cht/7/vixDaily3MNew) 的免費頁面月份列表實測可見 2026/06、07、08、09。月份檔可由下載連結重現，例如 [`202609new.txt`](https://www.taifex.com.tw/file/taifex/Dailydownload/vix/log2data/202609new.txt)；檔案是含標頭與分隔線的 tab-separated 純文字，資料列實際以七欄對齊，日期／時間在前兩欄、VIX 收盤在第五欄、收盤前 1 分鐘平均在第七欄。2026-09-15 日列的有效欄位為 `20260915`、`13450000`、`27.29`、`27.29`，因此日收盤 VIX 已直接驗證為 27.29。
 
 目前只納入日等級資料；盤中 TXT 與分時查詢不作為本項資料來源，也不拿盤中末值替代日收盤。
 
 TAIFEX [指數專區](https://www.taifex.com.tw/indes/index.aspx) 明示可查最近三年。本次點選「3年」實測圖表日期為 2023-09-16 至 2026-09-15；這是圖表查詢窗口，不代表已驗證可匯出同一期間日級 payload。
 
 TAIFEX [E-Data Shop VIX 新版歷史商品](https://edatashop.taifex.com.tw/zh/product/detail/40283ab7890b3664018924255bf2000f) 頁面列示可申購期間自 2007-01-01 至申購日前一完整月份，月資料，NT$3,000／半年，並有限定使用方式；這是付費產品規格，不是免費歷史窗口，也未在本次購買或取得檔案。免費月檔的日列同時提供 VIX 與收盤前 1 分鐘平均，兩欄應分開保存。
+
+本專案的 `taifex_vix` parser 已處理標頭／分隔線、七欄對齊、日期時間正規化、重複日期與不可用數值；`collect_vix_month` 可透過既有 ObservationStore 寫入日級 observation，GitHub Actions 的 `taifex-vix-daily-ingestion.yml` 只抓當月檔並以重跑去重。這不代表免費來源可回補三年或更長歷史。
 
 ## 尚待驗證
 

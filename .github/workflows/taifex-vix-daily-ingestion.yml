@@ -1,0 +1,59 @@
+name: TAIFEX VIX daily ingestion
+
+on:
+  workflow_dispatch:
+    inputs:
+      year:
+        description: "Optional VIX calendar year to backfill"
+        required: false
+        type: string
+      month:
+        description: "Optional VIX calendar month to backfill (1-12)"
+        required: false
+        type: string
+  schedule:
+    - cron: "0 8 * * 1-5"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: taifex-vix-daily-ingestion
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    name: Collect TAIFEX VIX daily observations
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      VIX_YEAR: ${{ inputs.year || '' }}
+      VIX_MONTH: ${{ inputs.month || '' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install HTTP client
+        run: python -m pip install --upgrade requests
+
+      - name: Verify Supabase secret names are available
+        shell: bash
+        run: |
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SECRET_KEY:-}" ]; then
+            echo "::error::SUPABASE_URL or SUPABASE_SECRET_KEY is empty or unavailable."
+            exit 1
+          fi
+
+      - name: Collect VIX month
+        shell: bash
+        run: |
+          args=()
+          if [ -n "${VIX_YEAR:-}" ]; then args+=(--year "$VIX_YEAR"); fi
+          if [ -n "${VIX_MONTH:-}" ]; then args+=(--month "$VIX_MONTH"); fi
+          python -m scripts.collect_taifex_vix_month "${args[@]}"

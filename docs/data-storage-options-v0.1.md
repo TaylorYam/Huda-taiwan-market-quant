@@ -1,7 +1,7 @@
 # Phase 1 儲存方案評估 v0.1
 
-- 日期：2026-09-16
-- 狀態：Phase 1 邊界已記錄於 [ADR 0001](adr/0001-phase-1-storage-boundary.md)（Proposed）；正式持久來源仍由 [Issue #9 ADR proposal](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/9) 追蹤
+- 日期：2026-09-17
+- 狀態：Phase 1 邊界已由 [ADR 0001](adr/0001-phase-1-storage-boundary.md) 接受；正式持久來源由 [Issue #18](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/18) 追蹤
 - 範圍：Phase 1 官方市場資料收集、品質檢查與本機開發；不選購或開通任何服務
 
 ## 評估依據
@@ -30,7 +30,7 @@
 
 ## 排程正式上線前必須決定
 
-在啟用每日正式排程之前，需透過 ADR 決定**唯一持久來源**及其擁有者，並同時決定：
+在啟用每日正式排程之前，需透過 [Issue #18](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/18) 與 Accepted ADR 決定**唯一持久來源**及其擁有者，並同時決定：
 
 1. Actions 執行完成後，歷史觀察與版本要寫入何處，以及 Dashboard 如何安全讀取。建議評估托管 PostgreSQL 保存正規化觀察／因子，必要時另用物件儲存保留授權允許的原始回應；也可提出其他有明確持久性與備援的方案。
 2. 保留期、備份頻率、還原方式、資料校正後重建流程，以及資料來源允許保存和再散布的範圍。

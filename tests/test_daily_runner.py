@@ -74,7 +74,9 @@ def test_paged_read_persists_unavailable_and_replay_is_duplicate(observations):
     assert first["score"] is None
     assert first["observation_count"] == 60
     assert first["factor_scores"]["taiex_ma20_ma60_trend"]["status"] == "available"
-    assert first["factor_scores"]["taiex_20d_momentum"]["status"] == "unavailable"
+    # 60 consecutive TAIEX closes give 39 candidate dates with >=21 trailing
+    # closes each, so momentum's own percentile history is now buildable.
+    assert first["factor_scores"]["taiex_20d_momentum"]["status"] == "available"
     assert "foreign_cash_5d" in first["missing_factor_ids"]
     assert first["action"] == "inserted"
     assert second["action"] == "duplicate"
@@ -175,7 +177,10 @@ def test_institutional_observations_reach_existing_adapter():
     assert all(
         row["dataset_id"] == "taifex_institutional_futures_oi_v1" for row in identities
     )
-    assert result["factor_scores"]["foreign_tx_net_position"]["status"] == "unavailable"
+    # 5 of the 6 fixture dates fall strictly before target, each with its own
+    # institutional observation, so the position factor's percentile history
+    # is now buildable from them.
+    assert result["factor_scores"]["foreign_tx_net_position"]["status"] == "available"
 
 
 def test_pagination_rejects_repeated_page(observations):

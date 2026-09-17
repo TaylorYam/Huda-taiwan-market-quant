@@ -35,9 +35,9 @@ identities.
 
 The foreign cash factor remains blocked by the source contract. Foreign TX
 open-interest inputs can now be calculated from institutional observations,
-but missing snapshots, insufficient lookback, or absent percentile histories
-still leave their scores unavailable. The aggregate remains unavailable while
-any required factor score is unavailable.
+but missing snapshots, insufficient lookback, or a percentile history with
+zero eligible historical points still leave their scores unavailable. The
+aggregate remains unavailable while any required factor score is unavailable.
 
 
 ## Manual daily runner
@@ -87,13 +87,17 @@ redacts exceptions because upstream transport errors may contain credentials.
 - Foreign TX OI (15% position + 10% five-day change): the existing adapter is
   connected, but usable snapshots and six observations for the five-day change
   are needed. No rows, stale rows, or insufficient lookback remain unavailable.
-- Percentile scoring: this runner deliberately supplies no historical-value
-  mapping. Versioned rolling-window, minimum-coverage and history-evidence
-  construction are not implemented here. Consequently continuous factor scores
-  remain unavailable even when their current raw inputs exist. PCR also retains
-  its existing model-policy gate. Only factors supported by the existing
-  non-percentile rules can currently receive a score. This is a persistence
-  milestone, not completion of the full daily scoring model.
+- Percentile scoring: the runner now builds each percentile factor's history
+  via `src/scoring/history.py`'s `build_historical_values`, which replays that
+  factor's own point-in-time adapter over every eligible date strictly before
+  the target within a trailing window (3 years by default, 1 year for VIX,
+  per `docs/factor-model-v0.1.md`'s initial assumption). This makes momentum,
+  PCR, basis, VIX and the foreign TX position/change factors scoreable once
+  enough raw history exists; it does not change the raw-input gates above, and
+  the window length itself is still an unconfirmed v0.1 hypothesis pending
+  the Phase 3 backtest in `docs/backtest-spec-v0.1.md`. PCR also retains its
+  existing model-policy gate on direction/threshold. Foreign cash stays
+  unavailable regardless, since it has no raw input to build a history from.
 
 The full factor result stays in the calculation; `market_scores` stores the
 existing envelope of factor score states/reasons and source identities. No new

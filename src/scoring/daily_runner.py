@@ -18,6 +18,7 @@ from src.factors.contracts import (
     TX_DATASET_ID,
     VIX_DATASET_ID,
 )
+from src.scoring.history import build_historical_values
 from src.scoring.pipeline import calculate_daily_score
 from src.scoring.writer import MarketScoreWriter, persist_market_score
 
@@ -53,8 +54,11 @@ def run_daily_score(
 ) -> dict[str, object]:
     """Persist unavailable results too; transport failures must propagate.
 
-    No percentile history is invented: its window/coverage policy has not yet
-    been implemented. Raw factors still retain their evidence in the pipeline.
+    Percentile history is built by :func:`build_historical_values`, which
+    replays each factor's own point-in-time adapter over its trailing window
+    (docs/factor-model-v0.1.md's initial 3-year/1-year assumption) instead of
+    inventing a shortcut distribution. Raw factors still retain their
+    evidence in the pipeline.
     """
     target = date.fromisoformat(target_date)
     boundary = _timestamp(as_of)
@@ -78,6 +82,15 @@ def run_daily_score(
         dataset: [row for row in eligible if row.dataset_id == dataset]
         for dataset in DATASETS
     }
+    historical_values = build_historical_values(
+        taiex_observations=grouped[TAIEX_DATASET_ID],
+        pcr_observations=grouped[PCR_DATASET_ID],
+        tx_observations=grouped[TX_DATASET_ID],
+        vix_observations=grouped[VIX_DATASET_ID],
+        institutional_observations=grouped[INSTITUTIONAL_FUTURES_DATASET_ID],
+        target_date=target,
+        as_of=canonical_as_of,
+    )
     result = calculate_daily_score(
         taiex_observations=grouped[TAIEX_DATASET_ID],
         pcr_observations=grouped[PCR_DATASET_ID],
@@ -86,6 +99,7 @@ def run_daily_score(
         institutional_observations=grouped[INSTITUTIONAL_FUTURES_DATASET_ID],
         target_date=target,
         as_of=canonical_as_of,
+        historical_values=historical_values,
     )
     record, outcome = persist_market_score(writer, result)
     return {

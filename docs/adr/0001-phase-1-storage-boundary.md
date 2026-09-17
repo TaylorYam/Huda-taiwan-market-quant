@@ -1,7 +1,9 @@
 # 0001: Phase 1 本機 SQLite 開發預設與正式持久化邊界
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-09-16
+
+This decision accepts the Phase 1 local development boundary only. Formal persistence for a production daily scheduler remains open under [Issue #18](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/18).
 
 ## Context
 
@@ -40,7 +42,7 @@ Phase 1 can implement parsers, quality checks, and data-contract behavior withou
 
 ## Follow-up
 
-Issue #9 records this boundary decision. A later ADR must select the formal persistent source before production scheduling, including backup and restore tests, retention, access control, secret rotation, cost limits, and source-data licensing.
+Issue #9 records the Phase 1 boundary. [Issue #18](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/18) must select the formal persistent source before production scheduling, including backup and restore tests, retention, access control, secret rotation, cost limits, and source-data licensing.
 
 ## Related documents
 

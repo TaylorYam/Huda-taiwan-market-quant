@@ -53,6 +53,25 @@ def test_collector_writes_observations_and_is_idempotent(tmp_path):
         assert [result.action for result in second] == ["duplicate", "duplicate"]
 
 
+def test_collector_links_changed_month_payload_as_revision(tmp_path):
+    revised_document = json.loads(fixture_bytes())
+    revised_document["data"][0][4] = "17,900.00"
+    revised_payload = json.dumps(revised_document, ensure_ascii=False).encode()
+
+    with SQLiteObservationStore(tmp_path / "market.sqlite3") as store:
+        first = collect_taiex_month(store, 2024, 1, http_get=lambda _: fixture_bytes())
+        revised = collect_taiex_month(
+            store, 2024, 1, http_get=lambda _: revised_payload
+        )
+
+        current = store.get_observation(revised[0].observation_id)
+
+    assert revised[0].action == "inserted"
+    assert current is not None
+    assert current.supersedes_id == first[0].observation_id
+    assert current.values["close"] == 17_900.0
+
+
 def test_parser_rejects_non_ok_or_missing_fields():
     document = json.loads(fixture_bytes())
     document["stat"] = "很抱歉，查無資料"

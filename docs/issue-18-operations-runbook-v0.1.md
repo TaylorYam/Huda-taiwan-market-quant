@@ -18,11 +18,17 @@ Issue #18 可引用的既有證據為 [run 35191715728](https://github.com/Taylo
 - 修訂 payload 會新增 row、保存兩個 payload hash，並用 `supersedes_id` 連回前一版本；原始 observation 的值不會被改寫。
 - 這些 run 沒有證明遠端 SQL migration、Supabase Data API 權限、資料庫 backup／restore、secret rotation、配額餘裕或來源條款。run 成功不能取代下列手動 gate。
 
+### 本次 Supabase 操作（2026-09-17，Asia/Taipei）
+
+- 目標 project：`TaylorYam's Project`（ref `vfjljdhpjhaebcgdzsvz`）。已在 SQL Editor 執行 [`001_observations.sql`](../src/data/sql/001_observations.sql) 與 [`002_market_scores.sql`](../src/data/sql/002_market_scores.sql)；兩份 migration 均回傳成功。
+- 唯讀驗證確認 `public.observations` 有 39 筆、`public.market_scores` 有 0 筆；兩表的 checked-in 欄位、索引與 RLS 狀態均存在。
+- [Supabase API smoke run 35211970093](https://github.com/TaylorYam/Huda-taiwan-market-quant/actions/runs/35211970093) 成功，`SUPABASE_URL` 與 `SUPABASE_SECRET_KEY` 均由 GitHub Secrets 提供且未出現在 log。Supabase project 目前沒有 `supabase_migrations.schema_migrations` metadata table；後續若要由 CLI 管理 migration history，需另行建立受控的 migration 流程。
+
 ### 仍需手動完成
 
 | Gate | 完成條件 | 證據應保存在哪裡 |
 |---|---|---|
-| Remote schema and API | 在目標 Supabase project 執行 migration，確認 `observations` 可由 Data API 讀取，並成功執行 smoke workflow | Issue #18 留下日期、project 名稱、migration 版本及 workflow run URL；不貼 key 或連線值 |
+| Remote schema and API | 在目標 Supabase project 執行 migration，確認 `observations` 可由 Data API 讀取，並成功執行 smoke workflow | 已於 2026-09-17 完成；project ref `vfjljdhpjhaebcgdzsvz`、migration `001`／`002`、[smoke run 35211970093](https://github.com/TaylorYam/Huda-taiwan-market-quant/actions/runs/35211970093) |
 | Backup | 產生完整 `pg_dump`，放到核准且受限的備份位置，記錄備份日期、範圍、保存期限及 owner | Issue #18 的 metadata；dump 本身不進 GitHub |
 | Restore drill | 還原到隔離 project／database，通過 row count、logical identity、payload hash、`supersedes_id` chain 比對，記錄 RTO 與最新可還原 observation date | Issue #18 的 drill record；隔離環境完成後刪除臨時資料 |
 | Access separation and rotation | Actions writer、Dashboard reader、操作者權限各自符合最小權限；新 key 已驗證後才撤銷舊 key | 只記錄 key 類型、輪替日期、驗證 run URL；不記錄 key 值 |
@@ -118,7 +124,7 @@ Supabase Free 不提供可依賴的 managed automatic backup 或 PITR，因此�
 | 項目 | 狀態 | 操作者／日期 | 證據 |
 |---|---|---|---|
 | Local migration、idempotency、revision lineage | 已驗證 | run 35191715728、35192169763 | workflow run URL |
-| Remote SQL migration and Data API exposure | 待手動 |  | Supabase SQL Editor + smoke run URL |
+| Remote SQL migration and Data API exposure | 已驗證 | 2026-09-17（Asia/Taipei） | [Supabase API smoke run 35211970093](https://github.com/TaylorYam/Huda-taiwan-market-quant/actions/runs/35211970093)；project ref `vfjljdhpjhaebcgdzsvz` |
 | Backup export and retention | 待手動 |  | dump metadata（不含 dump／secret） |
 | Isolated restore and reconciliation | 待手動 |  | RTO、latest recoverable date、比對結果 |
 | Actions writer / Dashboard reader separation | 待手動 |  | 權限檢查與各自驗證 run |

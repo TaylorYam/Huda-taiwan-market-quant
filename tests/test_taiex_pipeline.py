@@ -16,7 +16,9 @@ def test_current_taiwan_month_converts_runner_clock_before_selecting_month():
 
 def test_current_taiwan_month_requires_timezone():
     with pytest.raises(ValueError, match="timezone-aware"):
-        current_taiwan_month(datetime(2026, 9, 1, 0, 0))
+        current_taiwan_month(
+            datetime(2026, 9, 1, 0, 0, tzinfo=timezone.utc).replace(tzinfo=None)
+        )
 
 
 def test_summarize_write_results_counts_actions():

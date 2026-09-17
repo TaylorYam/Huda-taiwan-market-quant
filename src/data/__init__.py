@@ -1,5 +1,6 @@
 """Source adapters and normalized market observations."""
 
+from .postgres import PostgresObservationStore
 from .storage import (
     QUALITY_STATUSES,
     Observation,
@@ -7,7 +8,6 @@ from .storage import (
     SQLiteObservationStore,
     WriteResult,
 )
-from .postgres import PostgresObservationStore
 from .supabase_rest import SupabaseRestObservationStore
 from .twse_taiex import (
     TAIEX_DATASET_ID,

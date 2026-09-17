@@ -30,6 +30,11 @@ Issue #18 可引用的既有證據為 [run 35191715728](https://github.com/Taylo
 - SQL 盤點顯示 `public.observations` 為 104 kB（39 筆）、`public.market_scores` 為 32 kB（0 筆）；兩表合計約 136 kB。專案資料庫總量仍以 Supabase usage 頁的 24.96 MB 為準。
 - GitHub Actions billing API 需要目前 token 未提供的 `user` scope，因此本次只記錄 workflow run history，未宣稱 Actions quota gate 已完成；取得核准 billing scope 後再補記官方 usage snapshot。
 
+### Access check snapshot（2026-09-17，Asia/Taipei）
+
+- GitHub repository secret names 目前為 `SUPABASE_URL`、`SUPABASE_SECRET_KEY` 與 `MARKET_DB_URL`；所有 `.github/workflows/` 的正式 writer 都只引用前兩者，`MARKET_DB_URL` 沒有 workflow 引用，但 repository 仍保留手動 PostgreSQL 檢查腳本的支援，是否撤銷交由 owner 決定。
+- Supabase SQL 檢查確認 `public.observations` 與 `public.market_scores` 都已啟用 RLS，且目前沒有 public policy。server-side `SUPABASE_SECRET_KEY` 的 API smoke 已通過；Dashboard 的獨立 publishable／read-only credential 尚未建立，因此 access separation gate 不宣稱完成。
+
 ### 仍需手動完成
 
 | Gate | 完成條件 | 證據應保存在哪裡 |
@@ -133,7 +138,7 @@ Supabase Free 不提供可依賴的 managed automatic backup 或 PITR，因此�
 | Remote SQL migration and Data API exposure | 已驗證 | 2026-09-17（Asia/Taipei） | [Supabase API smoke run 35211970093](https://github.com/TaylorYam/Huda-taiwan-market-quant/actions/runs/35211970093)；project ref `vfjljdhpjhaebcgdzsvz` |
 | Backup export and retention | 待手動 |  | dump metadata（不含 dump／secret） |
 | Isolated restore and reconciliation | 待手動 |  | RTO、latest recoverable date、比對結果 |
-| Actions writer / Dashboard reader separation | 待手動 |  | 權限檢查與各自驗證 run |
+| Actions writer / Dashboard reader separation | 部分驗證 | 2026-09-17（Asia/Taipei） | Secrets 名稱與 RLS 已盤點；server-side smoke 通過，Dashboard 獨立唯讀 credential 尚待建立 |
 | Secret rotation | 待手動 |  | rotation date、old key revoked、smoke run |
 | Supabase / Actions quota snapshot | 部分驗證 | 2026-09-17（Asia/Taipei） | Supabase usage：24.96 MB／500 MB（5%）；Actions billing 尚待核准 scope 後補記 |
 | TWSE / TAIFEX source terms | 待手動 |  | 條款 URL、查核日期、限制與結論 |

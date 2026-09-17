@@ -8,6 +8,7 @@ from .storage import (
     WriteResult,
 )
 from .postgres import PostgresObservationStore
+from .supabase_rest import SupabaseRestObservationStore
 from .twse_taiex import (
     TAIEX_DATASET_ID,
     TAIEX_ENDPOINT,
@@ -27,6 +28,7 @@ __all__ = [
     "Observation",
     "ObservationStore",
     "PostgresObservationStore",
+    "SupabaseRestObservationStore",
     "SQLiteObservationStore",
     "TAIEXFetchError",
     "TAIEXParseError",

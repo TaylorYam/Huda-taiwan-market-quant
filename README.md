@@ -76,12 +76,12 @@ TWSE / TAIFEX 官方日資料
         ↓
 GitHub Actions：每日收集與寫入
         ↓
-Supabase Free PostgreSQL：持久化觀察與分數
+Supabase Free PostgreSQL + Data API：持久化觀察與分數
         ↓
 Vercel Hobby：Dashboard 與唯讀 API
 ```
 
-本機開發仍使用被 Git 忽略的 SQLite。Supabase Free 沒有託管自動備份或 PITR，Vercel Hobby 的每日 Cron 也不是精準排程器；完整限制、備份要求與升級條件見 [`docs/adr/0002-free-tier-mvp-stack.md`](docs/adr/0002-free-tier-mvp-stack.md)。
+本機開發仍使用被 Git 忽略的 SQLite。GitHub Actions 透過 Supabase Data API 寫入，不需要資料庫密碼；`SUPABASE_URL` 與 `SUPABASE_SECRET_KEY` 只放在 GitHub Secrets。Supabase Free 沒有託管自動備份或 PITR，Vercel Hobby 的每日 Cron 也不是精準排程器；完整限制、備份要求與升級條件見 [`docs/adr/0002-free-tier-mvp-stack.md`](docs/adr/0002-free-tier-mvp-stack.md) 與 [`docs/adr/0003-supabase-data-api-transport.md`](docs/adr/0003-supabase-data-api-transport.md)。
 
 ## v0.1 核心模型
 
@@ -114,7 +114,7 @@ Vercel Hobby：Dashboard 與唯讀 API
 - [x] 補查免費 BFI82U 現貨金額及 FMTQIK 成交金額資料來源；建立資料契約草案
 - [ ] 核對現貨金額分子／分母的版次、交易範圍與歷史缺口（Roadmap Phase 0）
 - [x] 確認 Phase 1 使用 Git 忽略的 SQLite observation store；免費 MVP 持久來源已由 ADR 0002 選定
-- [x] 選定免費 MVP 堆疊：GitHub Actions + Supabase Free PostgreSQL + Vercel Hobby
+- [x] 選定免費 MVP 堆疊：GitHub Actions + Supabase Free PostgreSQL Data API + Vercel Hobby
 - [ ] 建立官方資料收集與品質檢查（Phase 1）
 - [ ] 實作 8 個因子與 Market Score（Phase 2）
 - [ ] 驗證分數辨識力；通過後才做策略層回測（Phase 3）

@@ -44,7 +44,7 @@ Scoring Engine
      ↓
 Market Direction Result
      ↓
-Supabase Free PostgreSQL
+Supabase Free PostgreSQL / Data API
      ↓
 Vercel Hobby Dashboard
 ```
@@ -124,13 +124,13 @@ Dashboard 只讀取已計算的結果；資料庫寫入由 GitHub Actions 負責
 預計：
 
 - Python 作為資料抓取與量化計算核心
-- GitHub Actions 每日台股收盤後自動執行，將結果寫入 Supabase Free PostgreSQL
+- GitHub Actions 每日台股收盤後自動執行，透過 Supabase Data API 將結果寫入 Supabase Free PostgreSQL
 - Vercel Hobby 提供簡易 Web Dashboard 與唯讀查詢 API
 - 本機 SQLite 保留為開發與遷移測試資料庫
 
 第一版目標是不需要使用者每天手動更新資料，也不要求本機電腦持續開機。
 
-免費 MVP 的限制與升級條件記錄在 [ADR 0002](adr/0002-free-tier-mvp-stack.md)。在手動匯出、還原演練、權限分離與配額監控完成前，不啟用無人值守的正式每日流程。
+免費 MVP 的限制與升級條件記錄在 [ADR 0002](adr/0002-free-tier-mvp-stack.md)；Data API 傳輸方式見 [ADR 0003](adr/0003-supabase-data-api-transport.md)。在手動匯出、還原演練、權限分離與配額監控完成前，不啟用無人值守的正式每日流程。
 
 ## Quality attributes and constraints
 
@@ -161,10 +161,10 @@ Dashboard 只讀取已計算的結果；資料庫寫入由 GitHub Actions 負責
 
 - v0.1 採 8 因子可解釋規則模型
 - 第一版優先使用 TWSE + TAIFEX 官方免費來源
-- 免費 MVP 堆疊採 GitHub Actions + Supabase Free PostgreSQL + Vercel Hobby
+- 免費 MVP 堆疊採 GitHub Actions + Supabase Free PostgreSQL Data API + Vercel Hobby
 - 權重與門檻皆視為待回測的初始假設
 - 第一版不以機器學習預測明日漲跌為主要方向
-- Phase 1 本機開發採用被 Git 忽略的 SQLite；正式持久化 MVP 堆疊見 [ADR 0002](adr/0002-free-tier-mvp-stack.md)
+- Phase 1 本機開發採用被 Git 忽略的 SQLite；正式持久化 MVP 堆疊見 [ADR 0002](adr/0002-free-tier-mvp-stack.md)，傳輸層見 [ADR 0003](adr/0003-supabase-data-api-transport.md)
 
 後續若這些決策成為長期架構基礎，可另外建立 ADR。
 

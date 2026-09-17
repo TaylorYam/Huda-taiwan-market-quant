@@ -9,7 +9,7 @@
 
 The production scheduler must write observations and derived results to one durable source that a later Dashboard can read. The source must preserve the Phase 1 observation identity, source payload hash, parser version, quality status, and revision lineage. A runner-local file or a short-lived workflow artifact is not a production source.
 
-The Phase 1 local SQLite decision is already accepted in [ADR 0001](adr/0001-phase-1-storage-boundary.md). The free-tier MVP deployment choice is recorded in [ADR 0002](adr/0002-free-tier-mvp-stack.md); it does not replace the local boundary or claim production SLA.
+The Phase 1 local SQLite decision is already accepted in [ADR 0001](adr/0001-phase-1-storage-boundary.md). The free-tier MVP deployment choice is recorded in [ADR 0002](adr/0002-free-tier-mvp-stack.md), and the password-free transport is recorded in [ADR 0003](adr/0003-supabase-data-api-transport.md); neither replaces the local boundary or claims production SLA.
 
 ## Selected free-tier MVP stack
 
@@ -17,8 +17,8 @@ The Phase 1 local SQLite decision is already accepted in [ADR 0001](adr/0001-pha
 |---|---|---|---|
 | Source data | TWSE and TAIFEX official daily APIs | Collect the daily observations needed by the v0.1 factors | Respect each source's access, retention, and redistribution terms |
 | Scheduler and writer | GitHub Actions | Run the daily Python collector, quality checks, idempotent writes, and manual reruns | Subject to repository/account Actions quotas; credentials stay in Actions secrets |
-| Persistent database | Supabase Free PostgreSQL | Store normalized observations, revisions, factor results, and market scores | 500 MB database quota; no managed automatic backups or PITR; low-activity projects may pause |
-| Dashboard and read API | Vercel Hobby | Serve the dashboard and read-only application endpoints | Hobby Cron is optional, daily only, and may run within the configured hour; it is not the primary writer |
+| Persistent database | Supabase Free PostgreSQL via Supabase Data API | Store normalized observations, revisions, factor results, and market scores | 500 MB database quota; no managed automatic backups or PITR; low-activity projects may pause; Data API table exposure must be enabled |
+| Dashboard and read API | Vercel Hobby | Serve the dashboard and read-only application endpoints | Hobby Cron is optional, daily only, and may run within the configured hour; it is not the primary writer; never expose the server secret key to the browser |
 
 SQLite remains the local development store. The storage interface must allow a SQLite export to be migrated into PostgreSQL without losing logical keys, payload hashes, parser versions, quality states, or revision lineage.
 
@@ -42,7 +42,7 @@ SQLite remains the local development store. The storage interface must allow a S
 | Persistent single-host SQLite | Possible for one writer and a colocated Dashboard; weak for runner replacement and shared access | Host durability, encrypted backups, failover/recovery, network access, and operational ownership |
 | GitHub artifacts or repository commits | Not suitable as the historical database | No further evaluation; retention, write semantics, and source redistribution constraints fail the production boundary |
 
-The selected MVP uses managed PostgreSQL through Supabase Free. Render Free is not selected because its free database expires after 30 days and has no managed backups. Paid Supabase, Render, AWS RDS, or another PostgreSQL provider remain upgrade paths if the free-tier boundaries are reached.
+The selected MVP uses managed PostgreSQL through Supabase Free, accessed by the Supabase Data API from GitHub Actions. Render Free is not selected because its free database expires after 30 days and has no managed backups. Paid Supabase, Render, AWS RDS, or another PostgreSQL provider remain upgrade paths if the free-tier boundaries are reached.
 
 ## Evidence still required
 
@@ -56,4 +56,4 @@ The selected MVP uses managed PostgreSQL through Supabase Free. Render Free is n
 
 ## Accepted ADR gate
 
-Issue #18's provider selection is complete through [ADR 0002](adr/0002-free-tier-mvp-stack.md). The daily production workflow remains gated on the migration dry run, manual backup and restore drill, access separation, quota monitoring, and source-license check. Until those checks pass, the repository may continue local SQLite development and data collection but must not treat runner-local storage as the production source.
+Issue #18's provider selection is complete through [ADR 0002](adr/0002-free-tier-mvp-stack.md) and the transport choice through [ADR 0003](adr/0003-supabase-data-api-transport.md). The daily production workflow remains gated on the migration dry run, manual backup and restore drill, access separation, quota monitoring, and source-license check. Until those checks pass, the repository may continue local SQLite development and data collection but must not treat runner-local storage as the production source.

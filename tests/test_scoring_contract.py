@@ -108,3 +108,18 @@ def test_market_score_retains_factor_evidence_and_model_version() -> None:
 def test_invalid_direction_score_is_rejected() -> None:
     with pytest.raises(ValueError):
         classify_score(100.01)
+
+
+def test_scalar_factor_can_use_an_explicit_historical_percentile() -> None:
+    factor = FactorInput(
+        factor_id="taiwan_vix",
+        observation_date="2026-09-17",
+        status=FACTOR_AVAILABLE,
+        value=20,
+        values={"close": 20},
+    )
+
+    result = score_factor(factor, historical_values=[10, 20, 30])
+
+    assert result.available
+    assert result.score == pytest.approx(50)

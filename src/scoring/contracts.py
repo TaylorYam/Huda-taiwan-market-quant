@@ -9,7 +9,7 @@ re-fetch or infer source observations.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from math import isfinite
 from types import MappingProxyType
@@ -177,6 +177,27 @@ def _validate_score(score: float) -> float:
     return score
 
 
+def _percentile(
+    value: float, historical_values: Sequence[float], *, reverse: bool = False
+) -> float:
+    """Return a deterministic empirical percentile on the 0–100 scale."""
+
+    sample = sorted(float(item) for item in historical_values if isfinite(float(item)))
+    if not sample:
+        raise ValueError("historical_values must contain a finite value")
+    if not isfinite(value):
+        raise ValueError("factor value must be finite")
+    if len(sample) == 1:
+        percentile = (
+            50.0 if value == sample[0] else (100.0 if value > sample[0] else 0.0)
+        )
+    else:
+        less = sum(item < value for item in sample)
+        equal = sum(item == value for item in sample)
+        percentile = (less + equal / 2) / len(sample) * 100
+    return round(100 - percentile if reverse else percentile, 10)
+
+
 def _as_factor_input(factor: FactorInput | FactorScore) -> FactorInput | None:
     if isinstance(factor, FactorScore):
         return factor.evidence if factor.available else None
@@ -186,15 +207,18 @@ def _as_factor_input(factor: FactorInput | FactorScore) -> FactorInput | None:
 def score_factor(
     factor: FactorInput | FactorScore,
     *,
+    historical_values: Sequence[float] | None = None,
+    history: Sequence[float] | None = None,
     model_version: str = MODEL_VERSION,
 ) -> FactorScore:
     """Normalize one factor input to 0–100.
 
     Trend uses the five explicit MA rules from the model document.  Scalar
     inputs may carry a pre-normalized ``value`` (with no raw ``values`` map),
-    or a ``values['score']`` field.  Raw scalar normalization against a
-    historical distribution is intentionally deferred until the model fixes
-    those windows and thresholds.
+    or a ``values['score']`` field.  Raw scalar inputs can be ranked against
+    an explicitly supplied historical distribution; callers must construct
+    that distribution using only observations available at the same as-of
+    boundary.
     """
 
     if isinstance(factor, FactorScore):
@@ -265,8 +289,16 @@ def score_factor(
     except (TypeError, ValueError):
         value = float("nan")
     try:
+        if historical_values is None and history is not None:
+            historical_values = history
         raw_values = factor.values or {}
-        if "score" in raw_values:
+        if historical_values is not None:
+            score = _percentile(
+                value,
+                historical_values,
+                reverse=factor.factor_id == VIX_FACTOR_ID,
+            )
+        elif "score" in raw_values:
             score = _validate_score(raw_values["score"])
         elif not raw_values and isfinite(value):
             score = _validate_score(value)

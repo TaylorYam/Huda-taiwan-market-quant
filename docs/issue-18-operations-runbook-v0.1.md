@@ -37,9 +37,10 @@ Issue #18 可引用的既有證據為 [run 35191715728](https://github.com/Taylo
 
 ### Source terms snapshot（2026-09-17，Asia/Taipei）
 
-- [TWSE 網路資訊商店使用條款](https://eshop.twse.com.tw/zh/home/terms) 禁止未經同意以自動化裝置、指令碼、爬蟲或擷取程式下載資料；內容的使用、重製、散布及轉載另要求事前書面同意，引用時須標示來源並保持完整性。以目前條款文字，TWSE endpoint 的自動保存、備份與 Dashboard 再散布仍未取得明確授權。
+- [TWSE 網路資訊商店使用條款](https://eshop.twse.com.tw/zh/home/terms) 禁止未經同意以自動化裝置、指令碼、爬蟲或擷取程式下載資料；內容的使用、重製、散布及轉載另要求事前書面同意，引用時須標示來源並保持完整性。
 - [TAIFEX 網站使用條款](https://www.taifex.com.tw/cht/edu/userTerms) 將網站內容與資料列為受智慧財產權保護，重製、改作、散布或公開發表原則上需事前書面同意；政府資料開放平台授權的資料另有例外。直接使用交易資訊仍須對照[交易資訊使用管理辦法及契約](https://www.taifex.com.tw/cht/6/iTRule)的適用範圍與授權條件。
-- 結論：本次只完成條款定位與限制摘錄，尚未把任何來源標為 `allowed`；TWSE、TAIFEX 的自動下載、內部 Dashboard、備份與再散布邊界均維持 `unresolved`，需 owner 取得 endpoint／產品層級的書面確認後再更新 gate。
+- **書面確認（2026-09-17）**：owner 已親自去信 TWSE 與 TAIFEX，敘明本專案的使用方式與目的；雙方回覆確認可正常使用，條件為 (1) 僅限非商業用途、(2) 須標示資料來源。回覆內容由 owner 自行留存，不進 repository。
+- 結論：來源矩陣狀態更新為 `allowed with restrictions`（僅限非商業用途＋須標示來源）。TWSE、TAIFEX 的自動下載、內部 Dashboard 與再散布邊界視為已取得授權，**前提是專案維持非商業性質，且對外呈現（README、Dashboard、任何公開頁面）確實標示 TWSE／TAIFEX 資料來源**。目前 repository 尚未加入符合此條件的來源標示，列為待辦（見下表）。若未來用途擴大至商業性質，須重新向兩所確認。
 
 ### 仍需手動完成
 
@@ -50,7 +51,7 @@ Issue #18 可引用的既有證據為 [run 35191715728](https://github.com/Taylo
 | Restore drill | 還原到隔離 project／database，通過 row count、logical identity、payload hash、`supersedes_id` chain 比對，記錄 RTO 與最新可還原 observation date | Issue #18 的 drill record；隔離環境完成後刪除臨時資料 |
 | Access separation and rotation | Actions writer、Dashboard reader、操作者權限各自符合最小權限；新 key 已驗證後才撤銷舊 key | 只記錄 key 類型、輪替日期、驗證 run URL；不記錄 key 值 |
 | Quota and upgrade trigger | 記錄 Supabase database usage、Actions usage、資料增長估計及升級門檻 | Issue #18 的日期化 quota snapshot |
-| Source terms | 逐一確認 TWSE、TAIFEX 的保存、內部 Dashboard、備份及再散布條款允許目前資料邊界 | Issue #18 的來源、查核日期、結論及限制 |
+| Source terms | 已於 2026-09-17 取得 TWSE、TAIFEX 書面確認（`allowed with restrictions`：僅限非商業用途、須標示來源）；剩餘工作為在 README／Dashboard 補上符合條件的來源標示 | Issue #18 的來源、查核日期、結論及限制；email 回覆內容由 owner 自行留存，不進 repository |
 
 ## A. 首次建立或驗證遠端環境
 
@@ -147,7 +148,7 @@ Supabase Free 不提供可依賴的 managed automatic backup 或 PITR，因此�
 | Actions writer / Dashboard reader separation | 部分驗證 | 2026-09-17（Asia/Taipei） | Secrets 名稱與 RLS 已盤點；server-side smoke 通過，Dashboard 獨立唯讀 credential 尚待建立 |
 | Secret rotation | 待手動 |  | rotation date、old key revoked、smoke run |
 | Supabase / Actions quota snapshot | 部分驗證 | 2026-09-17（Asia/Taipei） | Supabase usage：24.96 MB／500 MB（5%）；Actions billing 尚待核准 scope 後補記 |
-| TWSE / TAIFEX source terms | 未解決 | 2026-09-17（Asia/Taipei） | [TWSE 條款](https://eshop.twse.com.tw/zh/home/terms)、[TAIFEX 條款](https://www.taifex.com.tw/cht/edu/userTerms)；自動下載與再散布仍待書面確認 |
+| TWSE / TAIFEX source terms | 已驗證（有條件） | 2026-09-17（Asia/Taipei） | [TWSE 條款](https://eshop.twse.com.tw/zh/home/terms)、[TAIFEX 條款](https://www.taifex.com.tw/cht/edu/userTerms)；owner 已取得雙方書面確認（僅限非商業用途＋須標示來源）；來源標示尚未加入 README／Dashboard，列入待辦 |
 
 ### 不通過時的處置
 

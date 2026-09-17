@@ -9,9 +9,9 @@
 | 項目 | 已驗證 | 邊界／待查 |
 |---|---|---|
 | TXO PCR | 官方日期表單 POST 可按日期下載；完整分段稽核已覆蓋 2001-12-24 至 2026-09-17：292 段、6,090 列、6,090 個唯一日期、0 錯誤、0 重複；最新資料日為 2026-09-16。 | 起訖日期相差最多 30 個曆日且兩端包含（每段最多 31 個曆日）。本次已確認來源窗口連續回應且日期不重複，但尚未用完整官方交易日曆逐日判定所有無資料日的原因。 |
-| TX 年行情 | 官方年度選單列出 1998–2025 共 28 年；完整稽核 28 份 ZIP 共 84,828 筆 TX 列、6,819 個年度日期、0 個年度內重複鍵，所有年度每個 TX 日期都有正成交量列。1998 首末資料日為 1998-07-21–12-31；2025 最新年檔為 2025-01-02–12-31。 | 全檔稽核確認 CP950 解析、年度首末日與 schema 轉換；1998 官方歷史交易日曆仍未取得，因此不能只靠檔案判定逐日缺漏，也不能把年度日期數直接當成交易日曆。 |
-| Taiwan VIX 日收盤 | 免費每日收盤頁顯示 2026/06–09 月份；月檔 `202609new.txt` 實測含 2026-09-15 日列，VIX 收盤 27.29、收盤前 1 分鐘平均 27.29。指數專區「3年」圖表實測窗口為 2023-09-16 至 2026-09-15。 | 免費日收盤 payload 已確認為月度 tab-separated 純文字；任意日期下載 endpoint、CSV 格式與三年圖表匯出仍未知。付費歷史商品另列，不視為免費資料。 |
-| 三大法人期貨 OI | 官方「區分各期貨契約－依日期」頁註明資料起日 2008-04-07，且自 2012-05-01 起只供查詢日前三年。2026-09-17 實測 OpenAPI 最新 JSON 快照，欄位含 `Date`、`ContractCode`、`Item`、`OpenInterest(Long/Short/Net)`；篩選 `臺股期貨`／`外資及陸資` 後，2026-09-16 淨未平倉為 -76,351 口。 | 超出公開查詢窗口的舊資料走「公開資料申購表」／TAIFEX E-Data Shop 歷史資料路徑；OpenAPI 沒有日期參數，只能自現在起逐日保存，不能直接回填舊日；本次未申請、未購買、未驗證交付檔。 |
+| TX 年行情 | 官方年度選單列出 1998–2025 共 28 年；完整稽核 28 份 ZIP 共 84,828 筆 TX 列、6,819 個年度日期、0 個年度內重複鍵，所有年度每個 TX 日期都有正成交量列。1998 首末資料日為 1998-07-21–12-31；2025 最新年檔為 2025-01-02–12-31。 | 全檔稽核確認 CP950 解析、年度首末日與 schema 轉換；1998 官方歷史交易日曆仍未取得，因此不能只靠檔案判定逐日缺漏，也不能把年度日期數直接當成交易日曆。**2026-09-17 決定：out of scope**——見下方「尚待驗證」第 2 項。 |
+| Taiwan VIX 日收盤 | 免費每日收盤頁顯示 2026/06–09 月份；月檔 `202609new.txt` 實測含 2026-09-15 日列，VIX 收盤 27.29、收盤前 1 分鐘平均 27.29。**2026-09-17 另實測指數專區背後的 `indes/index.aspx/GetStockDayPrices` JSON API（`syid=TAIWANVIX`、`flag=MS`）可回補 2023 年 10 月整月每日收盤（例如 2023/10/02 = 13.99）**，證實 log2data 月檔以外還有可用的日期查詢端點。 | `GetStockDayPrices` 對 2010/01 回傳空陣列，確認查詢窗口約為當下往前 3 年（rolling），不是固定歷史起點；晚做回補會讓較舊的月份永久超出窗口。CSV／log2data 月檔仍只有近 3～4 個月，兩者是互補而非同一機制。付費歷史商品另列，不視為免費資料。 |
+| 三大法人期貨 OI | 官方「區分各期貨契約－依日期」頁註明資料起日 2008-04-07，且自 2012-05-01 起只供查詢日前三年。2026-09-17 實測 OpenAPI 最新 JSON 快照，欄位含 `Date`、`ContractCode`、`Item`、`OpenInterest(Long/Short/Net)`；篩選 `臺股期貨`／`外資及陸資` 後，2026-09-16 淨未平倉為 -76,351 口。**同日另實測網頁版依日期下載表單 `cht/3/futContractsDateDown`（`commodityId=TXF`），可回補 2023/10/02 的完整三大法人資料（含外資及陸資淨未平倉 -7,012 口）**，證實 OpenAPI 以外還有可用的歷史查詢管道。 | 前端 JS 寫死允許區間為 2023/09/17～2026/09/17，同樣是約 3 年的 rolling window，超出窗口的舊資料仍須走「公開資料申購表」／E-Data Shop；OpenAPI 本身沒有日期參數的結論不變，但不能再據此宣稱「完全無法回填舊日」。本次未申請、未購買付費歷史商品，交付檔內容仍未驗證。 |
 
 ## PCR：日期回補入口、窗口限制與抽樣
 
@@ -97,7 +97,7 @@ TAIFEX [交易歷史資料申請頁](https://www.taifex.com.tw/cht/3/hisAppForm)
 
 也嘗試在依日期下載頁送出 2008-04-07 單日查詢，但沒有取得 CSV 下載或可讀的錯誤訊息；因此不把該次嘗試當成對舊日伺服器行為的實測結論。三年窗口與申購路徑的判斷來自該頁明載的官方註記及官方申請頁。
 
-2026-09-17 另以官方 OpenAPI 端點 [`MarketDataOfMajorInstitutionalTradersDetailsOfFuturesContractsBytheDate`](https://openapi.taifex.com.tw/v1/MarketDataOfMajorInstitutionalTradersDetailsOfFuturesContractsBytheDate) 直接實測 JSON。回應是最新快照，沒有日期查詢參數；以 `ContractCode=臺股期貨`、`Item=外資及陸資` 篩選後，2026-09-16 列的 `OpenInterest(Net)` 為 `-76351`。欄位同時提供多空未平倉口數與淨交易量，足以支援每日增量保存及 5 日變化因子。這個端點不提供歷史回補，因此正式 collector 只在每個交易日保存快照、記錄 `source_date`／`retrieved_at`，重跑時以來源內容去重並保留修訂 lineage；歷史三年以前仍需申請或購買官方檔案。
+2026-09-17 另以官方 OpenAPI 端點 [`MarketDataOfMajorInstitutionalTradersDetailsOfFuturesContractsBytheDate`](https://openapi.taifex.com.tw/v1/MarketDataOfMajorInstitutionalTradersDetailsOfFuturesContractsBytheDate) 直接實測 JSON。回應是最新快照，沒有日期查詢參數；以 `ContractCode=臺股期貨`、`Item=外資及陸資` 篩選後，2026-09-16 列的 `OpenInterest(Net)` 為 `-76351`。欄位同時提供多空未平倉口數與淨交易量，足以支援每日增量保存及 5 日變化因子。**這個 OpenAPI 端點本身不提供歷史回補，但同日另外實測網頁版 `依日期` 下載表單背後的 `cht/3/futContractsDateDown`（POST，欄位 `queryStartDate`／`queryEndDate`／`commodityId=TXF`）可查到 2023/10/02 的完整資料（外資及陸資淨未平倉 -7,012 口），前端 JS 寫死允許區間為 2023/09/17～2026/09/17，即約 3 年的 rolling window。** 因此三年內的歷史其實可以免費回補，只是要走這個表單端點而非 OpenAPI；正式 collector（`taifex_institutional.py`）目前只實作了 OpenAPI 最新快照的每日增量保存，尚未實作這個表單端點的回補邏輯，屬於待辦而非資料源限制。超出 3 年 rolling window 的資料仍需申請或購買官方歷史檔案。
 
 ## Taiwan VIX：免費日收盤窗口與歷史商品需分開
 
@@ -105,18 +105,18 @@ TAIFEX [交易歷史資料申請頁](https://www.taifex.com.tw/cht/3/hisAppForm)
 
 目前只納入日等級資料；盤中 TXT 與分時查詢不作為本項資料來源，也不拿盤中末值替代日收盤。
 
-TAIFEX [指數專區](https://www.taifex.com.tw/indes/index.aspx) 明示可查最近三年。本次點選「3年」實測圖表日期為 2023-09-16 至 2026-09-15；這是圖表查詢窗口，不代表已驗證可匯出同一期間日級 payload。
+TAIFEX [指數專區](https://www.taifex.com.tw/indes/index.aspx) 明示可查最近三年。本次點選「3年」實測圖表日期為 2023-09-16 至 2026-09-15。**進一步實測圖表背後的 JSON API `indes/index.aspx/GetStockDayPrices`（POST，欄位 `syid=TAIWANVIX`、`flag=MS`、`startDate`、`endDate`）證實可直接匯出同一期間的日級 payload**：查詢 2023/10/01–2023/10/31 回傳 20 筆日資料（例如 2023/10/02 收盤 13.99），查詢 2010/01 則回傳空陣列（無錯誤，純粹超出窗口）。這證實圖表查詢窗口與可匯出的日級資料是同一件事，不是分開的兩個限制。
 
 TAIFEX [E-Data Shop VIX 新版歷史商品](https://edatashop.taifex.com.tw/zh/product/detail/40283ab7890b3664018924255bf2000f) 頁面列示可申購期間自 2007-01-01 至申購日前一完整月份，月資料，NT$3,000／半年，並有限定使用方式；這是付費產品規格，不是免費歷史窗口，也未在本次購買或取得檔案。免費月檔的日列同時提供 VIX 與收盤前 1 分鐘平均，兩欄應分開保存。
 
-本專案的 `taifex_vix` parser 已處理標頭／分隔線、七欄對齊、日期時間正規化、重複日期與不可用數值；`collect_vix_month` 可透過既有 ObservationStore 寫入日級 observation，GitHub Actions 的 `taifex-vix-daily-ingestion.yml` 只抓當月檔並以重跑去重。這不代表免費來源可回補三年或更長歷史。
+本專案的 `taifex_vix` parser 已處理標頭／分隔線、七欄對齊、日期時間正規化、重複日期與不可用數值；`collect_vix_month` 可透過既有 ObservationStore 寫入日級 observation，GitHub Actions 的 `taifex-vix-daily-ingestion.yml` 只抓當月檔並以重跑去重，走的是 log2data 月檔（近 3～4 個月）。**免費來源其實可以回補約 3 年歷史，但要另外走 `GetStockDayPrices` API，`taifex_vix.py` 目前尚未實作這條路徑**，屬於待辦而非資料源限制；仍到不了三年以上或 2010 年的歷史。
 
 ## 尚待驗證
 
 1. PCR 2001-12-24–2026-09-17 已完成 292 段全期稽核；若要宣稱交易日覆蓋完整，仍需記錄官方交易日曆並解釋每個無資料日的原因。空白日期不能自動當成 PCR=0 或中性訊號。
-2. 如需宣稱跨完整 TX 歷史的交易日覆蓋，仍需取得 1998 年官方交易日曆並逐年做日期集合 reconciliation；年度 ZIP 本身已完成 1998–2025 全檔解析，但 2026 年度檔尚未出現在官方選單，且來源修訂狀態仍未知。
-3. VIX 日收盤月檔與 2026-09-15 日列已核實；免費窗口仍只有當月與前三個完整月份，任意日期下載 endpoint、CSV 格式與三年圖表匯出仍未知。若要延長日級歷史，需另行決定是否申購付費月資料。
-4. 若模型需要三年前的法人期貨 OI，先在歷史資料申請頁確認 OI 商品的最新可訂區間、價格、欄位與使用限制；在任何申購決定前，不把公開三年窗口外的資料視為已可得。
+2. **1998 年官方交易日曆 reconciliation：2026-09-17 決定 out of scope。** 原因：[`data-window-policy-v0.1.md`](data-window-policy-v0.1.md) 已確認 v0.1 模型的共同起點被 Taiwan VIX、法人期貨 OI 這兩個因子卡在約 2023 年（兩者都有約 3 年 rolling window 的免費回補管道，但共同起點仍取決於這兩個因子回補後的 earliest_date），1998–2001 年的 TX 資料不會被目前模型使用，逐日行事曆 reconciliation 對 v0.1 沒有實質意義。若未來因子必要性設計改變（例如把 VIX／法人期貨 OI 改為可選）而重新納入更長的 TX 歷史，才需要重新評估是否值得尋找 1998 年官方交易日曆。年度 ZIP 本身已完成 1998–2025 全檔解析（維持有效），但 2026 年度檔尚未出現在官方選單，且來源修訂狀態仍未知，這兩項仍是一般性資料維護待辦，與日曆 reconciliation 無關。
+3. **VIX、法人期貨 OI 的 3 年 rolling window 回補：2026-09-17 已確認可行但尚未實作。** `taifex_vix.py`、`taifex_institutional.py` 目前都只走「最新快照」路徑（log2data 月檔、OpenAPI），尚未實作 `GetStockDayPrices`／`futContractsDateDown` 這兩個支援日期查詢的端點。因為是 rolling window，愈晚實作能回補到的歷史愈短（例如 2027 年才做，2023 年的資料會永久超出窗口），建議列為有時效性的實作待辦，而非長期擱置的探測項目。
+4. 超出 3 年 rolling window 的歷史（VIX 更早於約 2023 年、法人期貨 OI 更早於約 2023 年）仍需走付費路徑：VIX 已知 E-Data Shop 最早 2007-01-01；法人期貨 OI 的付費歷史商品條件仍未驗證，需先在歷史資料申請頁確認可訂區間、價格、欄位與使用限制，任何申購決定前不把窗口外的資料視為已可得。
 
 ## 官方來源
 
@@ -134,13 +134,13 @@ TAIFEX [E-Data Shop VIX 新版歷史商品](https://edatashop.taifex.com.tw/zh/p
 - [TAIFEX 2024/07/24–25 凱米颱風休市公告](https://www.taifex.com.tw/cht/11/newsDetail?idx=15240&newsType=1)
 - [TAIFEX 2024/10/02–03 山陀兒颱風休市公告](https://www.taifex.com.tw/cht/11/newsDetail.do?idx=15394&thetype=2)
 - [TAIFEX 2024/10/31 康芮颱風休市公告](https://www.taifex.com.tw/cht/11/newsDetail?idx=15446&newsType=1)
-- [TAIFEX 期貨三大法人 OI 依日期查詢、資料窗口註記](https://www.taifex.com.tw/cht/3/futContractsDateView)
+- [TAIFEX 期貨三大法人 OI 依日期查詢、資料窗口註記](https://www.taifex.com.tw/cht/3/futContractsDateView)（下載表單 POST 至 `futContractsDateDown`，欄位 `queryStartDate`／`queryEndDate`／`commodityId`；2026-09-17 實測約 3 年 rolling window）
 - [TAIFEX OpenAPI：三大法人期貨契約日資料](https://openapi.taifex.com.tw/v1/MarketDataOfMajorInstitutionalTradersDetailsOfFuturesContractsBytheDate)
 - [TAIFEX 交易歷史資料申請（含期貨三大法人資料）](https://www.taifex.com.tw/cht/3/hisAppForm)
 - [TAIFEX E-Data Shop](https://edatashop.taifex.com.tw/)
 - [TAIFEX VIX 前 3 個月每日收盤頁](https://www.taifex.com.tw/cht/7/vixDaily3MNew)
 - [TAIFEX VIX 盤中查詢頁](https://www.taifex.com.tw/cht/7/vixMinNew)
-- [TAIFEX 指數專區（最近三年日期查詢）](https://www.taifex.com.tw/indes/index.aspx)
+- [TAIFEX 指數專區（最近三年日期查詢）](https://www.taifex.com.tw/indes/index.aspx)（背後 JSON API `indes/index.aspx/GetStockDayPrices`，欄位 `syid=TAIWANVIX`／`flag=MS`／`startDate`／`endDate`；2026-09-17 實測約 3 年 rolling window，超出窗口回傳空陣列）
 - [TAIFEX E-Data Shop VIX 新版歷史商品](https://edatashop.taifex.com.tw/zh/product/detail/40283ab7890b3664018924255bf2000f)
 - [TAIFEX TX 最後結算價資料起始月份註記](https://www.taifex.com.tw/cht/5/futIndxFSP)
 - [TWSE 60 週年特刊：交易制度沿革（星期六交易至民國 90 年）](https://www.twse.com.tw/staticFiles/product/publication/twse60/P5.pdf)

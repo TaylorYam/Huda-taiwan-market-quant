@@ -142,6 +142,21 @@ Model B：移除限制資料長度的因子，較長歷史
 
 ---
 
+## 目前現況（2026-09-17 確認）：兩個因子有免費回補，但是會捲動的 3 年窗口，2010 仍不可達
+
+Taiwan VIX 與法人期貨 OI（外資台指期淨部位、淨部位 5 日變化兩個因子的資料源）**確實有免費的歷史回補管道**，但先前的探測只測到「OpenAPI 沒有日期參數」與「log2data 月檔只有近 3～4 個月」，漏看了網站上另外兩個支援日期查詢的端點：
+
+- 法人期貨 OI：`https://www.taifex.com.tw/cht/3/futContractsDateDown`（表單 POST，欄位 `queryStartDate`／`queryEndDate`／`commodityId`）。2026-09-17 實測 `commodityId=TXF`、`2023/10/02` 可查到真實資料（外資及陸資淨未平倉 -7012 口，含自營商／投信／外資三類多空口數與契約金額）。頁面前端 JS 寫死允許區間為 `2023/09/17`～`2026/09/17`。
+- Taiwan VIX：`https://www.taifex.com.tw/indes/index.aspx/GetStockDayPrices`（JSON POST，欄位 `syid=TAIWANVIX`／`flag=MS`／`startDate`／`endDate`）。2026-09-17 實測 2023 年 10 月整月可查到每日收盤（例如 2023/10/02 = 13.99），測 2010/01 則回傳空陣列（無錯誤，純粹沒有資料）。
+
+兩者都是**查詢當下往前推約 3 年的 rolling window**，不是固定的歷史起點：現在（2026-09）回補最早可拿到約 2023-09；若延後到 2027 年才做，最早只能拿到約 2024-09，2023 年的資料會從免費查詢窗口永久消失、沒有其他管道補回來。**因此若要保留 2023 年至今的資料，需要儘快執行一次性回補，不能無限期擱置。** 2010 仍在 3 年窗口之外，不論何時回補都拿不到；付費 E-Data Shop 對 VIX 最早只到 2007-01-01，法人期貨 OI 的付費歷史商品條件未知。
+
+**修正後的共同起點分析**：目前的 collector（`taifex_vix.py`、`taifex_institutional.py`）只走「最新快照」端點，沒有使用上述兩個支援日期查詢的端點，因此**目前**這兩個因子的 `earliest_date` 仍等於 collector 第一次寫入的日期（約 2026-09-16／17）。但這是 collector 尚未實作回補功能的問題，不是資料源本身的限制。若補上使用這兩個端點的一次性回補，`earliest_date` 可以立即改善到約 2023-09；套用本文件的 `raw_common_start = max(各核心資料 earliest_date)` 公式，v0.1 共同起點可以達到約 **2023 年**，而不是 2026 年，但仍到不了 2010 年。
+
+**v0.1 決定**：2010 在不付費、不改變模型必要因子設計的前提下不可達，維持 out of scope。但共同起點回到約 2023 年是免費且可行的，屬於獨立的實作待辦——幫 `taifex_vix.py`、`taifex_institutional.py` 加上使用 `futContractsDateDown`／`GetStockDayPrices` 的一次性回補邏輯。這項工作有時效性：rolling window 會持續往前捲動，愈晚做能拿到的歷史愈短。
+
+---
+
 ## Probe 結果與下一步
 
 第一輪官方資料盤點與 Phase 0 補查分別見 [Data Availability Probe v0.1](data-availability-probe-v0.1.md) 與 [Phase 0 Source Research](phase0-source-research-v0.1.md)。除股數口徑的免費 T86 外，已找到免費 BFI82U 外資買賣金額日報表（頁面標示自 2004-04-07 起）及免費 FMTQIK 市場成交金額資料；外資分類／發布版本、同日交易類型口徑與可回補最早日仍須驗證。TAIFEX 外資期貨部位歷史頁只提供近三年、免費 Taiwan VIX 日期查詢最多近三年；PCR 可查歷史下界和 TX 年度 ZIP 首筆尚待實測。各資料集缺值率尚未計算。

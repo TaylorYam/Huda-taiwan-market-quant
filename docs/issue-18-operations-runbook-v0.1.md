@@ -24,6 +24,12 @@ Issue #18 可引用的既有證據為 [run 35191715728](https://github.com/Taylo
 - 唯讀驗證確認 `public.observations` 有 39 筆、`public.market_scores` 有 0 筆；兩表的 checked-in 欄位、索引與 RLS 狀態均存在。
 - [Supabase API smoke run 35211970093](https://github.com/TaylorYam/Huda-taiwan-market-quant/actions/runs/35211970093) 成功，`SUPABASE_URL` 與 `SUPABASE_SECRET_KEY` 均由 GitHub Secrets 提供且未出現在 log。Supabase project 目前沒有 `supabase_migrations.schema_migrations` metadata table；後續若要由 CLI 管理 migration history，需另行建立受控的 migration 流程。
 
+### Quota snapshot（2026-09-17，Asia/Taipei）
+
+- Supabase 使用量頁顯示 Free Plan、目前 billing cycle 為 2026-09-17 至 2026-10-17；database size 為 24.96 MB／500 MB（5%），egress 為 0／5 GB，cached egress 為 0／5 GB，storage 為 0／1 GB，MAU 為 0／50,000。Spend cap 已啟用。
+- SQL 盤點顯示 `public.observations` 為 104 kB（39 筆）、`public.market_scores` 為 32 kB（0 筆）；兩表合計約 136 kB。專案資料庫總量仍以 Supabase usage 頁的 24.96 MB 為準。
+- GitHub Actions billing API 需要目前 token 未提供的 `user` scope，因此本次只記錄 workflow run history，未宣稱 Actions quota gate 已完成；取得核准 billing scope 後再補記官方 usage snapshot。
+
 ### 仍需手動完成
 
 | Gate | 完成條件 | 證據應保存在哪裡 |
@@ -129,7 +135,7 @@ Supabase Free 不提供可依賴的 managed automatic backup 或 PITR，因此�
 | Isolated restore and reconciliation | 待手動 |  | RTO、latest recoverable date、比對結果 |
 | Actions writer / Dashboard reader separation | 待手動 |  | 權限檢查與各自驗證 run |
 | Secret rotation | 待手動 |  | rotation date、old key revoked、smoke run |
-| Supabase / Actions quota snapshot | 待手動 |  | 使用量、增長估計、升級 trigger |
+| Supabase / Actions quota snapshot | 部分驗證 | 2026-09-17（Asia/Taipei） | Supabase usage：24.96 MB／500 MB（5%）；Actions billing 尚待核准 scope 後補記 |
 | TWSE / TAIFEX source terms | 待手動 |  | 條款 URL、查核日期、限制與結論 |
 
 ### 不通過時的處置

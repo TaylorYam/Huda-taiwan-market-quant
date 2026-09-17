@@ -42,6 +42,7 @@ class SupabaseRestObservationStore:
         self._session.headers.update(
             {
                 "apikey": secret_key,
+                "Authorization": f"Bearer {secret_key}",
                 "Content-Type": "application/json",
                 "Accept": "application/json",
             }

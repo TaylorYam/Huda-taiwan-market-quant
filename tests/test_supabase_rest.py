@@ -39,6 +39,6 @@ def test_supabase_rest_store_uses_server_api_key_and_checks_table() -> None:
         pass
 
     assert session.headers["apikey"] == "sb_secret_test"
-    assert "Authorization" not in session.headers
+    assert session.headers["Authorization"] == "Bearer sb_secret_test"
     assert session.calls[0]["method"] == "GET"
     assert session.calls[0]["url"].endswith("/rest/v1/observations")

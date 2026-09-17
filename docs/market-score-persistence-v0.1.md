@@ -20,4 +20,4 @@ already been created.
 identity `(model_version, target_date, calculation_hash)` before inserting. A
 replay returns `duplicate`; a changed calculation is inserted as a separate
 row for auditability. `persist_market_score()` is the storage-neutral adapter
-used by an eventual daily workflow.
+used by the [manual daily runner](daily-score-pipeline-v0.1.md#manual-daily-runner).

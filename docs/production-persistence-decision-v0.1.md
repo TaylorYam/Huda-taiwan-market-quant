@@ -61,6 +61,8 @@ Issue #18's provider selection is complete through [ADR 0002](adr/0002-free-tier
 
 ## What can be verified locally
 
+The remaining operational gates are procedural rather than local code checks. Follow the [Issue #18 operations runbook](issue-18-operations-runbook-v0.1.md) for remote schema/API verification, manual backup and isolated restore, access separation and rotation, quota snapshots, and source-term review. The runbook records the two existing local-gate runs separately from these still-manual checks and contains no credential values.
+
 The credential-free command below is deterministic and safe to run from a clean checkout:
 
 ```text

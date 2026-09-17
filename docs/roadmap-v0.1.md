@@ -93,20 +93,20 @@
 | 4 | [#12 建立 Phase 1 SQLite storage interface 與 schema](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/12) | observation envelope 可寫入；相同 payload 冪等；修訂追加並以 `supersedes_id` 追溯；不可用狀態不補值；SQLite 細節隔離於介面 | Issue 3 |
 | 5 | [#14 建立 TAIEX 日行情收集器](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/14)（已合併） | 支援月查詢回填；保留官方原始日期、OHLC、單位、來源 URL、payload hash；錯誤不寫成有效觀察值；相同輸入可重跑 | Issue 3、4 |
 | 6 | 建立外資現貨收集器 | BFI82U／FMTQIK 版次與交易口徑先通過 Issue #5 閘門；支援回填及單日更新；錯誤不寫成有效觀察值 | Issue 1、3、4 |
-| 7 | 建立 TAIFEX TX、法人部位、PCR、VIX 收集器 | 保留契約、交易時段、OI、發布時間；最新快照可增量累積，歷史回填路徑有文件 | Issue 2–4、6 |
+| 7 | 建立 TAIFEX TX、法人部位、PCR、VIX 收集器 | TX、PCR、VIX 日級入口已合併；保留契約、交易時段、OI、來源 payload 與修訂關係；法人部位仍待供應商與歷史窗口確認 | Issue 2–4、6 |
 | 8 | 建立資料品質報告與交易日覆蓋檢查 | 顯示各來源 earliest/latest、missing ratio、重複列、stale 狀態與失敗原因 | Issue 5–7 |
 | 9 | 實作 v0.1 因子計算與必要測試 | 8 因子按版本規格計算；rolling/as-of、窗口暖機、basis 合約、缺值與邊界均有測試 | Issue 4–8、模型邊界決策 |
 | 10 | 實作 Market Score 與市場狀態標籤 | 權重來自單一設定；分數區間互斥；缺必要因子不產生完整總分；輸出分項與解釋 | Issue 9 |
 | 11 | 建立第一層分數辨識力回測 | 輸出 5／10／20 日分組統計、單調性、期間切分與限制；定義預測報酬價格錨點；無 look-ahead | Issue 8–10 |
 | 12 | 評估 v0.1 並決定是否進入策略層 | 對照成功標準，提交保留／修訂／停止結論；只有通過後才開策略層回測 | Issue 11 |
 | 13 | 建立 Dashboard MVP | 顯示 score、狀態、因子證據、as-of／更新時間及 unavailable；展示層不計分；Streamlit 啟動設定與 port 一致 | Issue 10–11 |
-| 14 | 建立 CI 與每日更新工作流程 | pytest/ruff 通過；按台灣交易日收盤資料更新；失敗／過期時不發布新有效分數 | Issue 5–10、13 |
+| 14 | 建立 CI 與每日更新工作流程 | CI quality/tests 與 patch whitespace 已分線；TAIEX、VIX、PCR、TX 已有每日或手動入口；正式無人值守仍須通過 Supabase migration、備份與權限驗證 | Issue 5–10、13、18 |
 
 ## 目前狀態
 
 - **已完成文件基礎：** 目標／架構、factor model、data window policy、backtest spec、第一輪 data availability probe。
 - **儲存方案與介面：** 已比較本機 SQLite、CSV／Parquet、Git、Actions artifacts 與外部持久服務；[ADR 0001](adr/0001-phase-1-storage-boundary.md) 已接受 SQLite 作為 Phase 1 本機開發預設，[Issue #12](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/12) 已合併 observation interface 與 schema。[正式持久化決策矩陣](production-persistence-decision-v0.1.md) 已列出驗收條件，[ADR 0002](adr/0002-free-tier-mvp-stack.md) 已選定 Supabase Free PostgreSQL、GitHub Actions 與 Vercel Hobby，[ADR 0003](adr/0003-supabase-data-api-transport.md) 已選定 Data API 傳輸；[Issue #18](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/18) 追蹤實作前的驗證工作。
 - **Phase 0 進度：** Issue #5 已完成並合併。現貨查證確認免費 BFI82U 2004-04-07 的外資列與近期拆分列不同，且早期報表不含鉅額而 FMTQIK 分母包含鉅額；E-Shop 檔案碼／時間版次映射與 CSV 欄位對照仍未知，因此歷史現貨因子暫不得實作。Issue #7 已完成 PCR 292 段全期稽核與 TX 1998–2025 28 份年檔稽核；仍待 1998 交易日曆、PCR 缺日 reconciliation、VIX 三年日級匯出及法人 OI 舊資料供應。正式排程儲存仍待 ADR。
-- **程式狀態：** 已有 Phase 1 SQLite observation interface、schema、冪等與 revision 測試，以及已合併的 TAIEX 月查詢 JSON parser／collector；新增了以 Supabase Data API 寫入當月 TAIEX 的手動／平日排程入口。尚沒有外資現貨、TAIFEX 收集器、因子、評分、回測或 Dashboard 實作。
-- **下一個工作包：** TAIEX 已有可操作的日級入口；Issue #7 的 PCR 與 TX 年檔只讀稽核均已完成，下一步是用官方交易日曆補做 PCR 缺日與 1998 TX 日期 reconciliation，再把已驗證的 TAIFEX 日級來源逐一接入。VIX 日收盤月檔已可作為候選來源，但完整缺值率與三年匯出仍保留未知。完成前不把未驗證來源接入收集器。外資現貨仍須先解決 Issue #5 留下的 BFI82U／FMTQIK 口徑與版次差異。
-- **GitHub Issue 狀態：** Issue #5、#12、#14 已完成並關閉；目前開啟的後續項目為 Issue #7、#9 與 #18。#9 的 Phase 1 邊界已由 ADR 0001 接受，正式排程持久化改由 #18 追蹤。Roadmap 其他工作項目仍是草案，不代表已建立 GitHub Issues。
+- **程式狀態：** 已有 Phase 1 SQLite observation interface、schema、冪等與 revision 測試，TAIEX、VIX、PCR、TX 的官方日級入口，以及 Supabase Data API 寫入與 CI quality/tests 分線。尚沒有外資現貨、法人部位、因子、評分、回測或 Dashboard 實作。
+- **下一個工作包：** 先完成 #18 的 Supabase migration／備份／權限驗證，並用 #7 的交易日曆與缺日 reconciliation 封口資料品質報告；接著並行建立已可用來源的 factor adapters、缺值狀態與 rolling/as-of 測試。外資現貨仍須先解決 Issue #5 留下的 BFI82U／FMTQIK 口徑與版次差異，不能以股數序列替代金額因子。
+- **GitHub Issue 狀態：** Issue #5、#12、#14、#24 已完成並關閉；目前開啟的後續項目為 Issue #7、#9 與 #18。#9 的 Phase 1 邊界已由 ADR 0001 接受，正式排程持久化改由 #18 追蹤。Roadmap 其他工作項目仍是草案，不代表已建立 GitHub Issues。

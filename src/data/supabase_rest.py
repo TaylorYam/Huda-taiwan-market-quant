@@ -7,6 +7,7 @@ created once with the SQL migration in ``src/data/sql/001_observations.sql``.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Self
 
 import requests
@@ -52,9 +53,16 @@ class SupabaseRestObservationStore:
 
     def initialize(self) -> None:
         """Verify that the observations table is exposed by the Data API."""
+        self.verify_table("observations")
+
+    def verify_table(self, table_name: str) -> None:
+        """Verify that a public table is exposed without returning rows."""
+
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", table_name) is None:
+            raise ValueError("table_name must be a simple public table name")
         self._request(
             "GET",
-            "/observations",
+            f"/{table_name}",
             params={"select": "id", "limit": "0"},
         )
 

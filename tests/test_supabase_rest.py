@@ -42,3 +42,16 @@ def test_supabase_rest_store_uses_server_api_key_and_checks_table() -> None:
     assert session.headers["Authorization"] == "Bearer sb_secret_test"
     assert session.calls[0]["method"] == "GET"
     assert session.calls[0]["url"].endswith("/rest/v1/observations")
+
+
+def test_supabase_rest_store_can_verify_derived_score_table() -> None:
+    session = FakeSession()
+
+    with SupabaseRestObservationStore(
+        "https://example.supabase.co",
+        "sb_secret_test",
+        session=session,
+    ) as store:
+        store.verify_table("market_scores")
+
+    assert session.calls[1]["url"].endswith("/rest/v1/market_scores")

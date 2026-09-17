@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from src.data import SupabaseRestObservationStore
 
 
@@ -95,3 +97,97 @@ def test_supabase_rest_store_writes_market_score_payload() -> None:
     post = session.calls[-1]
     assert post["method"] == "POST"
     assert post["json"]["calculation_hash"] == "a" * 64
+
+
+def _backtest_row(row_id: int, observation_date: str) -> dict[str, Any]:
+    return {
+        "id": row_id,
+        "dataset_id": "twse_taiex_daily_v1",
+        "schema_version": "0.1",
+        "observation_date": observation_date,
+        "source_date": observation_date,
+        "source_name": "TWSE",
+        "source_url": "https://example.test/taiex",
+        "source_record_key": "TAIEX",
+        "published_at": None,
+        "publication_label": None,
+        "effective_at": None,
+        "retrieved_at": "2026-09-17T00:00:00+00:00",
+        "ingested_at": "2026-09-17T00:00:00+00:00",
+        "source_revision": None,
+        "supersedes_id": None,
+        "source_payload_hash": "0" * 64,
+        "parser_version": "test@0.1",
+        "values_json": {"close": 100.0},
+        "quality_status": "available",
+        "quality_notes": None,
+    }
+
+
+class PagedBacktestSession(FakeSession):
+    """Returns one observation row per page to exercise cursor pagination."""
+
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        super().__init__()
+        self.rows = rows
+
+    def request(self, method: str, url: str, **kwargs: Any) -> FakeResponse:
+        self.calls.append({"method": method, "url": url, **kwargs})
+        params = kwargs.get("params") or {}
+        response = FakeResponse()
+        if url.endswith("/observations") and params.get("limit") == "1000":
+            cursor = int(params["id"].removeprefix("gt."))
+            page = [row for row in self.rows if row["id"] > cursor][:1]
+            response.json = lambda page=page: page  # type: ignore[method-assign]
+        return response
+
+
+def test_load_backtest_observations_pages_through_a_capped_transport() -> None:
+    rows = [_backtest_row(i, f"2026-01-{i:02d}") for i in range(1, 4)]
+    session = PagedBacktestSession(rows)
+
+    with SupabaseRestObservationStore(
+        "https://example.supabase.co",
+        "sb_secret_test",
+        session=session,
+    ) as store:
+        result = store.load_backtest_observations(
+            dataset_ids=["twse_taiex_daily_v1"],
+            start_date="2026-01-01",
+            end_date="2026-01-31",
+        )
+
+    assert [observation.observation_date for observation in result] == [
+        "2026-01-01",
+        "2026-01-02",
+        "2026-01-03",
+    ]
+    backtest_calls = [
+        call
+        for call in session.calls
+        if call["url"].endswith("/observations")
+        and call["params"].get("limit") == "1000"
+    ]
+    # 3 one-row pages plus the final empty page that ends the loop: pagination
+    # must not stop just because a page came back shorter than the limit.
+    assert len(backtest_calls) == 4
+    assert backtest_calls[0]["params"]["observation_date"] == [
+        "gte.2026-01-01",
+        "lte.2026-01-31",
+    ]
+
+
+def test_load_backtest_observations_rejects_a_reversed_date_range() -> None:
+    with (
+        SupabaseRestObservationStore(
+            "https://example.supabase.co",
+            "sb_secret_test",
+            session=FakeSession(),
+        ) as store,
+        pytest.raises(ValueError),
+    ):
+        store.load_backtest_observations(
+            dataset_ids=["twse_taiex_daily_v1"],
+            start_date="2026-02-01",
+            end_date="2026-01-01",
+        )

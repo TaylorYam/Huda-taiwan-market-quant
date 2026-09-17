@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import date
 from typing import Any, Self
 
 import requests
@@ -131,6 +132,52 @@ class SupabaseRestObservationStore:
                     "observation_date": f"lte.{target_date}",
                     "ingested_at": f"lte.{as_of}",
                     "retrieved_at": f"lte.{as_of}",
+                    "id": f"gt.{cursor}",
+                    "order": "id.asc",
+                    "limit": "1000",
+                },
+            )
+            if not rows:
+                return result
+            ids = [int(row["id"]) for row in rows]
+            if ids != sorted(set(ids)) or ids[0] <= cursor:
+                raise RuntimeError("Observation pagination did not advance")
+            result.extend(_observation_from_row(row) for row in rows)
+            cursor = ids[-1]
+
+    def load_backtest_observations(
+        self, *, dataset_ids: Sequence[str], start_date: str, end_date: str
+    ) -> list[Observation]:
+        """Read every observation in a date range for an offline backtest replay.
+
+        Unlike :meth:`load_score_observations`, this does not gate on
+        ``ingested_at``, ``retrieved_at`` or ``published_at``: those record
+        when a collector actually saw the data, which for bulk-backfilled
+        history all reads as "whenever the backfill ran" and would hide
+        every historical row from a knowledge-boundary check that only makes
+        sense for a live run. A backtest replay's point-in-time guarantee
+        comes from ``observation_date`` alone, enforced downstream by the
+        factor adapters (see ``src/backtest/layer1.py``).
+        """
+
+        date.fromisoformat(start_date)
+        date.fromisoformat(end_date)
+        if start_date > end_date:
+            raise ValueError("start_date must not be after end_date")
+        if not dataset_ids or any(
+            re.fullmatch(r"[A-Za-z0-9_.-]+", name) is None for name in dataset_ids
+        ):
+            raise ValueError("dataset_ids must contain valid identifiers")
+        result: list[Observation] = []
+        cursor = 0
+        while True:
+            rows = self._request(
+                "GET",
+                "/observations",
+                params={
+                    "select": "*",
+                    "dataset_id": f"in.({','.join(dataset_ids)})",
+                    "observation_date": [f"gte.{start_date}", f"lte.{end_date}"],
                     "id": f"gt.{cursor}",
                     "order": "id.asc",
                     "limit": "1000",

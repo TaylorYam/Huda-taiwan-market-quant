@@ -286,6 +286,49 @@ Buy & Hold Comparison
 
 ---
 
+## 實作現況（2026-09-17）：第一層引擎已完成，尚未有足夠真實資料可產出正式結論
+
+第一層回測引擎已實作於 `src/backtest/layer1.py`，並提供 CLI 入口
+`scripts/run_backtest_layer1.py`：
+
+- `build_score_series` 對回測區間內每一個有 TAIEX 收盤的交易日重播
+  `calculate_daily_score`，歷史百分位一律由 `src/scoring/history.py` 的
+  `build_historical_values` 依當天以前的資料現算，不會用整段期間一次算好再回填
+  （符合第 5 節的 rolling/expanding 要求）。
+- `compute_forward_returns` 以 TAIEX 收盤序列本身的交易日順位計算未來 5／10／20
+  日報酬，作為驗證用的結果標籤；資料不足以支撐某個窗口時明確回傳 `None`，不用
+  外插值頂替。
+- `summarize_buckets` 把每日分數依 `src.scoring.contracts.classify_score`
+  （與正式評分同一個函式，不重新定義門檻）分入五組，計算樣本數、平均／中位報酬
+  與上漲比例；`unavailable` 的日子不會被計入任何一組。
+- `Layer1Report.is_monotonic()` 檢查平均報酬是否由低分組到高分組遞增；少於兩組
+  有樣本時明確回傳「無法判斷」，不會假裝有結論。
+
+**一個重要的語意差異**：這個引擎呼叫評分層時刻意不帶 `as_of`（即
+`as_of_policy` 退回只看 `observation_date <= target_date`），而不是比照
+`daily_runner.py` 現場運行時使用的 `retrieved_at`／`ingested_at`／`published_at`
+knowledge-boundary 檢查。原因是本文件第 7 節提到的一次性歷史回補資料，其
+`retrieved_at`／`ingested_at` 記的是「回補當下」（例如 2026-09），不是「歷史上
+那一天真的知道」；如果沿用現場運行的檢查邏輯，等於要求回測當天就已經在
+2026 年收到資料，所有歷史日期都會判定為不可用。回測的 look-ahead 防線改為
+單純依賴 `observation_date`，這已經是每個因子 adapter 在 `as_of=None` 時的預設
+行為，不是另外發明的規則。
+
+**目前仍缺的是資料，不是程式**：8 個核心因子的官方資料共同起點目前仍卡在
+Taiwan VIX／法人期貨 OI 的 ~2023-09（見
+[`data-window-policy-v0.1.md`](data-window-policy-v0.1.md)），且一次性回補
+（`scripts/backfill_taifex_*_range.py`）尚未實際對正式 Supabase 執行。因此本文件
+第 8 節的三個成功標準（高分組是否明顯優於低分組、五組是否大致單調、是否跨
+5／10／20 日與不同市場環境成立）都還沒有真實資料可以驗證；`run_layer1_backtest`
+只用合成資料端對端測過管線本身的正確性（見 `tests/test_backtest_layer1.py`），
+還沒有得出任何關於模型是否有效的結論，也不應該被引用為模型驗證結果。
+
+實際執行一次性回補、讓每日 collector 持續累積之後，才能用
+`python -m scripts.run_backtest_layer1 --start-date ... --end-date ...`
+對真實資料跑出本文件第 9 節格式的正式報告。
+
+---
+
 ## 下一步
 
 第一輪資料可用性盤點已完成，來源與未確認項目見 [`data-availability-probe-v0.1.md`](data-availability-probe-v0.1.md)。依賴順序與 Issue 草案見 [`roadmap-v0.1.md`](roadmap-v0.1.md)：先關閉資料單位、歷史窗口與資料契約，再實作資料層與分數辨識力回測。策略層回測須等第一層通過本文件的成功標準後再開始。

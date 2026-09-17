@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from collections.abc import Callable, Mapping, Sequence
 from datetime import date, datetime, timezone
 from typing import Any
@@ -64,19 +65,36 @@ def parse_taiex_payload(
         raise TAIEXParseError("TAIEX response fields are missing")
     if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
         raise TAIEXParseError("TAIEX response data rows are missing")
+    if not rows:
+        raise TAIEXParseError("TAIEX response contains no daily rows")
     indexes = _field_indexes(fields)
 
-    payload_hash = source_payload_hash or payload_sha256(payload)
+    computed_hash = payload_sha256(payload)
+    if source_payload_hash is not None and source_payload_hash != computed_hash:
+        raise TAIEXParseError("TAIEX source payload hash does not match response")
+    payload_hash = source_payload_hash or computed_hash
     retrieved = retrieved_at or _utc_now()
     ingested = ingested_at or _utc_now()
+    expected_month = _response_month(document)
     month_label = _month_label(rows)
     observations: list[Observation] = []
+    seen_dates: set[str] = set()
     for row_number, row in enumerate(rows, start=1):
         if not isinstance(row, Sequence) or isinstance(row, (str, bytes)):
             raise TAIEXParseError(f"TAIEX row {row_number} is not an array")
         try:
             source_date = str(row[indexes["date"]]).strip()
             observation_date = _normalize_source_date(source_date)
+            if observation_date[:7] != expected_month:
+                raise TAIEXParseError(
+                    f"TAIEX row {row_number} date {observation_date!r} "
+                    f"is outside response month {expected_month}"
+                )
+            if observation_date in seen_dates:
+                raise TAIEXParseError(
+                    f"TAIEX row {row_number} repeats date {observation_date!r}"
+                )
+            seen_dates.add(observation_date)
             values = {
                 "open": _parse_number(row[indexes["open"]], "open", row_number),
                 "high": _parse_number(row[indexes["high"]], "high", row_number),
@@ -104,8 +122,6 @@ def parse_taiex_payload(
                 publication_label=month_label,
             )
         )
-    if not observations:
-        raise TAIEXParseError("TAIEX response contains no daily rows")
     return observations
 
 
@@ -150,6 +166,31 @@ def collect_taiex_month(
     return [store.write_observation(observation) for observation in observations]
 
 
+def collect_taiex_range(
+    store: ObservationStore,
+    start_year: int,
+    start_month: int,
+    end_year: int,
+    end_month: int,
+    *,
+    http_get: Callable[[str], bytes] | None = None,
+    parser_version: str = TAIEX_PARSER_VERSION,
+) -> list[WriteResult]:
+    """Backfill an inclusive range of calendar months in chronological order."""
+    results: list[WriteResult] = []
+    for year, month in _month_range(start_year, start_month, end_year, end_month):
+        results.extend(
+            collect_taiex_month(
+                store,
+                year,
+                month,
+                http_get=http_get,
+                parser_version=parser_version,
+            )
+        )
+    return results
+
+
 def _field_indexes(fields: Sequence[Any]) -> dict[str, int]:
     aliases = {
         "date": {"日期", "Date"},
@@ -183,6 +224,29 @@ def _month_label(rows: Sequence[Any]) -> str:
     return f"month:{year:04d}-{int(parts[1]):02d}"
 
 
+def _response_month(document: Mapping[str, Any]) -> str:
+    raw_date = document.get("date")
+    if not isinstance(raw_date, str) or len(raw_date) < 6 or not raw_date[:6].isdigit():
+        raise TAIEXParseError("TAIEX response month is missing or invalid")
+    year, month = int(raw_date[:4]), int(raw_date[4:6])
+    try:
+        return f"{date(year, month, 1):%Y-%m}"
+    except ValueError as exc:
+        raise TAIEXParseError("TAIEX response month is invalid") from exc
+
+
+def _month_range(
+    start_year: int, start_month: int, end_year: int, end_month: int
+) -> list[tuple[int, int]]:
+    _validate_month(start_year, start_month)
+    _validate_month(end_year, end_month)
+    start = start_year * 12 + start_month - 1
+    end = end_year * 12 + end_month - 1
+    if start > end:
+        raise ValueError("TAIEX range start must not be after end")
+    return [(index // 12, index % 12 + 1) for index in range(start, end + 1)]
+
+
 def _normalize_source_date(source_date: str) -> str:
     normalized = source_date.replace("-", "/")
     parts = normalized.split("/")
@@ -207,11 +271,16 @@ def _parse_number(value: Any, field_name: str, row_number: int) -> float:
             f"TAIEX row {row_number} field {field_name} is unavailable"
         )
     try:
-        return float(text)
+        number = float(text)
     except ValueError as exc:
         raise TAIEXParseError(
             f"TAIEX row {row_number} field {field_name} is not numeric"
         ) from exc
+    if not math.isfinite(number):
+        raise TAIEXParseError(
+            f"TAIEX row {row_number} field {field_name} is not finite"
+        )
+    return number
 
 
 def _validate_month(year: int, month: int) -> None:

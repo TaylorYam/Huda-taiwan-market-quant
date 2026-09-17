@@ -36,5 +36,8 @@ jobs:
           fi
           echo "MARKET_DB_URL is present (value hidden)."
 
+      - name: Test PostgreSQL connection
+        run: python scripts/check_postgres_connection.py
+
       - name: Initialize and verify schema
         run: python scripts/check_postgres.py

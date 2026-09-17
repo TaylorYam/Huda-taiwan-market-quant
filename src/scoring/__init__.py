@@ -23,6 +23,7 @@ from .engine import (
     calculate_market_score,
     score_market,
 )
+from .pipeline import DailyScoreResult, calculate_daily_score
 
 __all__ = [
     "BEAR",
@@ -33,10 +34,12 @@ __all__ = [
     "REQUIRED_FACTOR_IDS",
     "STRONG_BEAR",
     "STRONG_BULL",
+    "DailyScoreResult",
     "FactorScore",
     "MarketDirection",
     "MarketScore",
     "aggregate_scores",
+    "calculate_daily_score",
     "calculate_factor_score",
     "calculate_market_score",
     "classify_score",

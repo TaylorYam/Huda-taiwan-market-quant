@@ -47,7 +47,8 @@ The selected MVP uses managed PostgreSQL through Supabase Free, accessed by the 
 ## Evidence still required
 
 - Measure the real observation and derived-result volume after the daily collectors are available; do not size from guesses.
-- Run a SQLite-to-candidate migration dry run and compare row counts, logical identities, hashes, and revision chains.
+- Run the local persistence gate with `python scripts/check_persistence_gate.py`. It checks the committed PostgreSQL migration contract and replays insert, duplicate, and revision writes in a temporary SQLite store, including row count, payload hash, retrieval count, and `supersedes_id` lineage.
+- Complete a real SQLite-to-Supabase migration dry run and compare row counts, logical identities, hashes, and revision chains. The local gate cannot execute PostgreSQL SQL or prove a remote migration succeeded.
 - Add a manual `pg_dump` export workflow and execute a restore drill into an isolated environment; record recovery time and the latest recoverable observation date.
 - Verify Actions-to-database and Dashboard-to-database permissions separately, including secret rotation.
 - Define retention for normalized observations, derived results, and any raw payloads independently.
@@ -57,3 +58,15 @@ The selected MVP uses managed PostgreSQL through Supabase Free, accessed by the 
 ## Accepted ADR gate
 
 Issue #18's provider selection is complete through [ADR 0002](adr/0002-free-tier-mvp-stack.md) and the transport choice through [ADR 0003](adr/0003-supabase-data-api-transport.md). The daily production workflow remains gated on the migration dry run, manual backup and restore drill, access separation, quota monitoring, and source-license check. Until those checks pass, the repository may continue local SQLite development and data collection but must not treat runner-local storage as the production source.
+
+## What can be verified locally
+
+The credential-free command below is deterministic and safe to run from a clean checkout:
+
+```text
+python scripts/check_persistence_gate.py
+```
+
+It reads [`src/data/sql/001_observations.sql`](../src/data/sql/001_observations.sql), verifies the identity indexes and lineage columns are present, and uses a temporary SQLite database to prove that the storage contract preserves an original payload, treats a replay as a duplicate, increments `retrieval_count`, and appends a correction linked by `supersedes_id`. The temporary database is deleted when the command exits.
+
+The following steps still require an authorized operator in Supabase. Run the migration in the Supabase SQL Editor, confirm that `observations` is exposed through the Data API, then run the existing [`supabase-api-smoke.yml`](../.github/workflows/supabase-api-smoke.yml) workflow with `SUPABASE_URL` and `SUPABASE_SECRET_KEY` supplied through GitHub Actions secrets. A successful local gate does not verify remote schema execution, API permissions, backup and restore behavior, quota headroom, or source-term approval.

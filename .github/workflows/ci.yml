@@ -37,8 +37,8 @@ jobs:
             git diff --check "${BEFORE_SHA}...HEAD"
           fi
 
-  python:
-    name: Python tests and lint
+  quality:
+    name: Python quality
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -51,13 +51,37 @@ jobs:
           cache: pip
 
       - name: Install validation dependencies
-        run: python -m pip install --upgrade pip pytest ruff requests
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --requirement requirements-dev.txt
 
       - name: Run Ruff lint
         run: ruff check src tests
 
       - name: Check Ruff formatting
-        run: ruff format --check src tests
+        run: |
+          if ! ruff format --check src tests; then
+            echo "::error::Ruff formatting failed. Run 'python -m ruff format src tests' locally and commit the result."
+            exit 1
+          fi
+
+  tests:
+    name: Python tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install validation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --requirement requirements-dev.txt
 
       - name: Run tests
         run: python -m pytest -q

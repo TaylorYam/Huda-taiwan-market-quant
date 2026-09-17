@@ -59,6 +59,9 @@ class PCRRecord:
     put_oi: float
     call_oi: float
     oi_ratio: float
+    # Keep the official date spelling for the observation envelope.  The
+    # normalized ``observation_date`` remains the value used for filtering.
+    source_date: str = ""
 
 
 def iter_pcr_windows(start: date, end: date) -> Iterator[PCRWindow]:
@@ -109,6 +112,7 @@ def parse_pcr_csv(
         records.append(
             PCRRecord(
                 observation_date=observation_date,
+                source_date=values[0].strip(),
                 put_volume=_parse_number(values[1], window, row_number),
                 call_volume=_parse_number(values[2], window, row_number),
                 volume_ratio=_parse_number(values[3], window, row_number),

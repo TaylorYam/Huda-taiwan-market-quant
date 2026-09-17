@@ -1,0 +1,4 @@
+# Pinned tools used by local validation and GitHub Actions.
+pytest==9.1.1
+requests==2.32.5
+ruff==0.16.8

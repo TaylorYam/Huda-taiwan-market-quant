@@ -1,0 +1,53 @@
+name: TAIFEX PCR daily ingestion
+
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Optional trading date to collect, YYYY-MM-DD"
+        required: false
+        type: string
+  schedule:
+    - cron: "0 8 * * 1-5"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: taifex-pcr-daily-ingestion
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    name: Collect TAIFEX PCR daily observation
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      PCR_DATE: ${{ inputs.date || '' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install HTTP client
+        run: python -m pip install --upgrade requests
+
+      - name: Verify Supabase secret names are available
+        shell: bash
+        run: |
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SECRET_KEY:-}" ]; then
+            echo "::error::SUPABASE_URL or SUPABASE_SECRET_KEY is empty or unavailable."
+            exit 1
+          fi
+
+      - name: Collect PCR day
+        shell: bash
+        run: |
+          args=()
+          if [ -n "${PCR_DATE:-}" ]; then args+=(--date "$PCR_DATE"); fi
+          python -m scripts.collect_taifex_pcr "${args[@]}"

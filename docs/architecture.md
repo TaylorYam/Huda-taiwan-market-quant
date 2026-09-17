@@ -94,6 +94,11 @@ Vercel Hobby Dashboard
 
 ### Web Dashboard
 
+本機可啟動的唯讀 Streamlit MVP 入口為 `streamlit_app.py`。
+Python 伺服器透過 Supabase Data API 讀取最新持久化 Market Score 與各來源
+最近擷取紀錄；secret key 只存在伺服器環境。此展示入口不改變下列正式部署方向，
+不重算分數、不寫入資料。啟動與資料缺漏限制見 README。
+
 網站第一版重點是「先顯示結論，再顯示原因」。
 
 至少顯示：

@@ -2,6 +2,9 @@ name: Database schema smoke test
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - docs/free-tier-mvp-stack
 
 permissions:
   contents: read

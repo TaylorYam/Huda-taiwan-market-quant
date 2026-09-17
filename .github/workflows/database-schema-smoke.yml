@@ -27,5 +27,14 @@ jobs:
       - name: Install PostgreSQL client
         run: python -m pip install --upgrade "psycopg[binary]>=3.2,<4"
 
+      - name: Verify database secret is available
+        shell: bash
+        run: |
+          if [ -z "${MARKET_DB_URL:-}" ]; then
+            echo "::error::MARKET_DB_URL is empty or unavailable to this workflow."
+            exit 1
+          fi
+          echo "MARKET_DB_URL is present (value hidden)."
+
       - name: Initialize and verify schema
         run: python scripts/check_postgres.py

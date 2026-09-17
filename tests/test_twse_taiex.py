@@ -96,6 +96,24 @@ def test_parser_rejects_wrong_month_duplicate_date_and_non_finite_values():
         )
 
     document = json.loads(fixture_bytes())
+    document["fields"] = [
+        "開盤指數",
+        "日期",
+        "最高指數",
+        "最低指數",
+        "收盤指數",
+    ]
+    document["data"] = [
+        ["17,853.76", "113/01/02", "17,853.76", "17,549.40", "17,853.76"],
+        ["17,735.91", "113/01/03", "17,735.91", "17,609.72", "17,535.49"],
+    ]
+    observations = parse_taiex_payload(
+        json.dumps(document, ensure_ascii=False).encode(),
+        source_url="https://example.test/taiex",
+    )
+    assert observations[0].publication_label == "month:2024-01"
+
+    document = json.loads(fixture_bytes())
     document["data"][1][0] = document["data"][0][0]
     with pytest.raises(TAIEXParseError, match="repeats date"):
         parse_taiex_payload(
@@ -147,3 +165,18 @@ def test_url_builder_rejects_invalid_month_and_uses_official_endpoint():
     )
     with pytest.raises(ValueError):
         build_taiex_month_url(1998, 12)
+
+
+def test_fetch_rejects_response_for_a_different_requested_month():
+    document = json.loads(fixture_bytes())
+    document["date"] = "20240201"
+    document["data"][0][0] = "113/02/01"
+    document["data"][1][0] = "113/02/02"
+    with pytest.raises(TAIEXParseError, match="requested month"):
+        from src.data.twse_taiex import fetch_taiex_month
+
+        fetch_taiex_month(
+            2024,
+            1,
+            http_get=lambda _: json.dumps(document, ensure_ascii=False).encode(),
+        )

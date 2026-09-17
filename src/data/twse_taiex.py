@@ -48,6 +48,7 @@ def parse_taiex_payload(
     retrieved_at: str | None = None,
     ingested_at: str | None = None,
     parser_version: str = TAIEX_PARSER_VERSION,
+    expected_month: str | None = None,
 ) -> list[Observation]:
     """Parse one TWSE monthly JSON response into daily observations."""
     try:
@@ -75,8 +76,12 @@ def parse_taiex_payload(
     payload_hash = source_payload_hash or computed_hash
     retrieved = retrieved_at or _utc_now()
     ingested = ingested_at or _utc_now()
-    expected_month = _response_month(document)
-    month_label = _month_label(rows)
+    response_month = _response_month(document)
+    if expected_month is not None and expected_month != response_month:
+        raise TAIEXParseError(
+            f"TAIEX response month does not match requested month {expected_month}"
+        )
+    month_label = _month_label(rows, indexes["date"])
     observations: list[Observation] = []
     seen_dates: set[str] = set()
     for row_number, row in enumerate(rows, start=1):
@@ -85,10 +90,10 @@ def parse_taiex_payload(
         try:
             source_date = str(row[indexes["date"]]).strip()
             observation_date = _normalize_source_date(source_date)
-            if observation_date[:7] != expected_month:
+            if observation_date[:7] != response_month:
                 raise TAIEXParseError(
                     f"TAIEX row {row_number} date {observation_date!r} "
-                    f"is outside response month {expected_month}"
+                    f"is outside response month {response_month}"
                 )
             if observation_date in seen_dates:
                 raise TAIEXParseError(
@@ -145,6 +150,7 @@ def fetch_taiex_month(
         source_url=url,
         source_payload_hash=payload_sha256(payload),
         parser_version=parser_version,
+        expected_month=f"{year:04d}-{month:02d}",
     )
 
 
@@ -210,11 +216,14 @@ def _field_indexes(fields: Sequence[Any]) -> dict[str, int]:
     return indexes
 
 
-def _month_label(rows: Sequence[Any]) -> str:
+def _month_label(rows: Sequence[Any], date_index: int) -> str:
     first = rows[0]
-    if not isinstance(first, Sequence) or isinstance(first, (str, bytes)) or not first:
+    if not isinstance(first, Sequence) or isinstance(first, (str, bytes)):
         raise TAIEXParseError("TAIEX response has no usable first row")
-    raw_date = str(first[0]).strip().replace("-", "/")
+    try:
+        raw_date = str(first[date_index]).strip().replace("-", "/")
+    except IndexError as exc:
+        raise TAIEXParseError("TAIEX response has no usable first row") from exc
     parts = raw_date.split("/")
     if len(parts) != 3 or not parts[1].isdigit():
         return "monthly"

@@ -1,0 +1,52 @@
+name: TAIFEX TX archive audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_year:
+        description: "First annual ZIP year"
+        required: false
+        default: "1998"
+        type: string
+      end_year:
+        description: "Last annual ZIP year"
+        required: false
+        default: "2025"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Audit annual TX ZIP archives
+    runs-on: ubuntu-latest
+    env:
+      TX_START_YEAR: ${{ inputs.start_year || '1998' }}
+      TX_END_YEAR: ${{ inputs.end_year || '2025' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install HTTP client
+        run: python -m pip install --upgrade requests
+
+      - name: Audit official annual ZIP archives
+        shell: bash
+        run: |
+          python -m scripts.audit_taifex_tx_archives \
+            --start-year "$TX_START_YEAR" \
+            --end-year "$TX_END_YEAR" \
+            --output tx-archive-audit.json
+
+      - name: Upload audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: taifex-tx-archive-audit
+          path: tx-archive-audit.json
+          if-no-files-found: error

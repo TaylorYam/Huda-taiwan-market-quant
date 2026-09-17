@@ -18,9 +18,7 @@ def build_parser() -> argparse.ArgumentParser:
             "repository and any public artifact location."
         )
     )
-    parser.add_argument(
-        "--database", type=Path, default=Path("data/market.sqlite3")
-    )
+    parser.add_argument("--database", type=Path, default=Path("data/market.sqlite3"))
     parser.add_argument(
         "--output", type=Path, required=True, help="Destination JSON file."
     )

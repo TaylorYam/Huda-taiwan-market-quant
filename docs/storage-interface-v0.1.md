@@ -35,9 +35,14 @@ Data API 驗證由 [`scripts/check_supabase_api.py`](../scripts/check_supabase_a
 python -m scripts.export_sqlite_observations \
   --database data/market.sqlite3 \
   --output /path/outside/repository/observations.json
+
+python -m scripts.validate_sqlite_export \
+  /path/outside/repository/observations.json
 ```
 
 匯出依 `id` 排序，保留每列的 SQLite storage id、`supersedes_id`、payload hash、品質欄位、時間欄位與解碼後的 `values`。`id` 只用來建立遷移時的舊到新 ID 對照；正式 PostgreSQL 不應直接假設沿用 SQLite ID。遷移器應先插入無父列、建立 ID 對照，再依對照改寫 `supersedes_id` 插入修訂列，最後以 logical identity、payload hash、row count 與 revision chain 比對。輸出檔必須放在受限且不會進 Git、Actions artifact 或公開儲存的位置。
+
+`validate_sqlite_export.py` 會拒絕格式錯誤、row count 不一致、重複 identity、無效 hash、缺少父列、跨 identity 的 revision link 與 lineage cycle。若匯出是刻意篩選的片段，只有在父列已存在於目標資料庫時，才可使用 `--allow-external-parents`。
 
 ## 尚未包含的範圍
 

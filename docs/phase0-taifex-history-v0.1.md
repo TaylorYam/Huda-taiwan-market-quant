@@ -30,6 +30,8 @@ UI 實測起訖相差 30 日的 `2026/08/17–2026/09/16` 可查；相差 31 日
 
 從 2001/12/24 至 2026/09/17 共 9,034 個曆日；以每段最多 31 個曆日且首尾不重疊估算，需 292 次請求。四段抽樣資料日期唯一，但沒有遍歷所有請求，也未取得全期交易日覆蓋率；因此不能宣稱全期間完整。OpenAPI 沒有日期參數，只能作最新快照；日級 CSV 的實際編碼仍未由官方文件明載，若進行回補應序列執行並設失敗退避。空白日期不能自動當作 PCR=0 或中性訊號。
 
+本專案新增 `python -m scripts.audit_taifex_pcr` 作為只讀稽核工具。它依每段最多 30 日差、端點包含的規則建立不重疊窗口，使用官方 `pcRatioDown` POST，按 MS950／UTF-8 解碼，記錄每段欄位、列數、日期範圍、錯誤與全域重複日期，將 JSON 報告寫入指定檔案。工具不寫入 observation store，也不把非交易日補成 0；GitHub Actions 的 `taifex-pcr-window-audit.yml` 僅手動啟動並保存報告 artifact。完整稽核尚未執行前，仍不能宣稱 2001 年以來資料完整。
+
 ## TX 年度行情 ZIP：年度範圍與代表檔完整檢查
 
 [TAIFEX 期貨每日交易行情下載頁](https://www.taifex.com.tw/cht/3/futDailyMarketView)（舊入口仍為 `/cht/3/dlFutDailyMarketView`）的年度選單實測列出 1998–2025，共 28 個年度；頁面說明歷史年度提供 ZIP。年度下載表單 POST 至 `/cht/3/futDataDown`，參數為 `down_type=2`、`his_year=YYYY`。本次全檔檢查 1998、2024、2025 三份年檔，未逐年下載其餘 25 份。

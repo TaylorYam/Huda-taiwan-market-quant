@@ -14,6 +14,16 @@ from .taiex_pipeline import (
     current_taiwan_month,
     summarize_write_results,
 )
+from .taifex_pcr_probe import (
+    PCR_ENDPOINT,
+    PCR_FIRST_VERIFIED_DATE,
+    PCRParseError,
+    PCRRecord,
+    PCRWindow,
+    audit_pcr_range,
+    iter_pcr_windows,
+    parse_pcr_csv,
+)
 from .twse_taiex import (
     TAIEX_DATASET_ID,
     TAIEX_ENDPOINT,
@@ -27,23 +37,31 @@ from .twse_taiex import (
 )
 
 __all__ = [
+    "PCR_ENDPOINT",
+    "PCR_FIRST_VERIFIED_DATE",
     "QUALITY_STATUSES",
     "TAIEX_DATASET_ID",
     "TAIEX_ENDPOINT",
     "TAIWAN_TIMEZONE",
     "Observation",
     "ObservationStore",
+    "PCRParseError",
+    "PCRRecord",
+    "PCRWindow",
     "PostgresObservationStore",
     "SQLiteObservationStore",
     "SupabaseRestObservationStore",
     "TAIEXFetchError",
     "TAIEXParseError",
     "WriteResult",
+    "audit_pcr_range",
     "build_taiex_month_url",
     "collect_taiex_month",
     "collect_taiex_range",
     "current_taiwan_month",
     "fetch_taiex_month",
+    "iter_pcr_windows",
+    "parse_pcr_csv",
     "parse_taiex_payload",
     "summarize_write_results",
 ]

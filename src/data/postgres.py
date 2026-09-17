@@ -22,7 +22,12 @@ from .storage import (
     base_identity_fields,
 )
 
-POSTGRES_SCHEMA_PATH = Path(__file__).with_name("sql") / "001_observations.sql"
+POSTGRES_SCHEMA_PATH = (
+    Path(__file__).parents[2]
+    / "supabase"
+    / "migrations"
+    / "20260917000100_observations.sql"
+)
 
 
 def _postgres_schema_sql() -> str:

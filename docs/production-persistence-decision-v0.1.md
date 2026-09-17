@@ -69,6 +69,6 @@ The credential-free command below is deterministic and safe to run from a clean 
 python scripts/check_persistence_gate.py
 ```
 
-It reads [`src/data/sql/001_observations.sql`](../src/data/sql/001_observations.sql), verifies the identity indexes and lineage columns are present, and uses a temporary SQLite database to prove that the storage contract preserves an original payload, treats a replay as a duplicate, increments `retrieval_count`, and appends a correction linked by `supersedes_id`. The temporary database is deleted when the command exits.
+It reads [`supabase/migrations/20260917000100_observations.sql`](../supabase/migrations/20260917000100_observations.sql), verifies the identity indexes and lineage columns are present, and uses a temporary SQLite database to prove that the storage contract preserves an original payload, treats a replay as a duplicate, increments `retrieval_count`, and appends a correction linked by `supersedes_id`. The temporary database is deleted when the command exits.
 
 The following steps still require an authorized operator in Supabase. Run the migration in the Supabase SQL Editor, confirm that `observations` is exposed through the Data API, then run the existing [`supabase-api-smoke.yml`](../.github/workflows/supabase-api-smoke.yml) workflow with `SUPABASE_URL` and `SUPABASE_SECRET_KEY` supplied through GitHub Actions secrets. A successful local gate does not verify remote schema execution, API permissions, backup and restore behavior, quota headroom, or source-term approval.

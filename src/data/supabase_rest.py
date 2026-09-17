@@ -2,7 +2,7 @@
 
 This adapter keeps the MVP independent from a database password. It calls the
 PostgREST endpoint with a server-only Supabase secret key. The schema must be
-created once with the SQL migration in ``src/data/sql/001_observations.sql``.
+created once with the SQL migration in ``supabase/migrations/20260917000100_observations.sql``.
 """
 
 from __future__ import annotations

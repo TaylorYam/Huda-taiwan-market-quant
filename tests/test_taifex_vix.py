@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from datetime import date
+
 import pytest
 
 from src.data import (
@@ -7,8 +10,26 @@ from src.data import (
     VIXParseError,
     build_vix_month_url,
     collect_vix_month,
+    collect_vix_range,
     parse_vix_payload,
+    parse_vix_range_payload,
 )
+
+
+def range_payload(*points: tuple[str, float]) -> bytes:
+    trend = [{"Time": time, "Price": price} for time, price in points]
+    inner = json.dumps(
+        {
+            "TrendData": trend,
+            "CurrentPrice": 24.06,
+            "ChangeToday": -0.39,
+            "OpenPrice": 0.0,
+            "Datadate": "2026/09/17",
+            "startDate": "20231001",
+            "endDate": "20231031",
+        }
+    )
+    return json.dumps({"d": inner}).encode("utf-8")
 
 
 def sample_payload() -> bytes:
@@ -85,3 +106,55 @@ def test_collector_writes_month_through_observation_store():
         observation = store.get_observation(results[0].observation_id)
         assert observation is not None
         assert observation.dataset_id == "taifex_taiwan_vix_close_v1"
+
+
+def test_parse_vix_range_payload_creates_daily_observations_without_avg():
+    payload = range_payload(("20231002", 13.99), ("20231003", 14.97))
+
+    records = parse_vix_range_payload(payload)
+
+    assert [record.observation_date for record in records] == [
+        "2023-10-02",
+        "2023-10-03",
+    ]
+    assert records[0].values == {"close": 13.99, "unit": "index_points"}
+    assert records[0].source_date == "20231002"
+    assert records[0].publication_label == "day:2023-10-02"
+    assert records[0].quality_status == "available"
+
+
+def test_parse_vix_range_payload_empty_series_returns_no_rows():
+    assert parse_vix_range_payload(range_payload()) == []
+
+
+def test_parse_vix_range_payload_rejects_duplicate_dates():
+    payload = range_payload(("20231002", 13.99), ("20231002", 14.5))
+
+    with pytest.raises(VIXParseError, match="repeats"):
+        parse_vix_range_payload(payload)
+
+
+def test_collect_vix_range_is_idempotent_and_links_revision():
+    with SQLiteObservationStore(":memory:") as store:
+        first = collect_vix_range(
+            store,
+            date(2023, 10, 2),
+            date(2023, 10, 2),
+            http_post=lambda url, body: range_payload(("20231002", 13.99)),
+        )
+        duplicate = collect_vix_range(
+            store,
+            date(2023, 10, 2),
+            date(2023, 10, 2),
+            http_post=lambda url, body: range_payload(("20231002", 13.99)),
+        )
+        revised = collect_vix_range(
+            store,
+            date(2023, 10, 2),
+            date(2023, 10, 2),
+            http_post=lambda url, body: range_payload(("20231002", 14.50)),
+        )
+
+    assert first[0].action == "inserted"
+    assert duplicate[0].action == "duplicate"
+    assert revised[0].action == "inserted"

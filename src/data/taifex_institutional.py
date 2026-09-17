@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
 import json
 import math
 from collections.abc import Callable, Mapping
 from dataclasses import replace
 from datetime import date, datetime, timezone
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from .storage import Observation, ObservationStore, WriteResult
@@ -21,6 +24,24 @@ INSTITUTIONAL_FUTURES_ENDPOINT = (
 INSTITUTIONAL_FUTURES_PARSER_VERSION = "taifex-institutional-futures-oi-json@0.1"
 INSTITUTIONAL_FUTURES_SOURCE_NAME = "TAIFEX"
 INSTITUTIONAL_FUTURES_SOURCE_RECORD_KEY = "TX:foreign:institutional"
+
+# Historical backfill path. Unlike INSTITUTIONAL_FUTURES_ENDPOINT (OpenAPI,
+# latest snapshot only, no date parameter), this is the website's date-range
+# download form. It only serves a rolling window of roughly the most recent
+# three years (the page's own client-side check read as of 2026-09-17:
+# 2023/09/17-2026/09/17). A request outside that window returns an HTML
+# error page instead of CSV, which surfaces here as
+# InstitutionalFuturesParseError rather than an empty result -- confirmed
+# 2026-09-17 against both the exact boundary date and a date years earlier.
+# Because the window rolls forward with the current date, delaying a
+# backfill permanently loses its older end.
+INSTITUTIONAL_FUTURES_RANGE_ENDPOINT = (
+    "https://www.taifex.com.tw/cht/3/futContractsDateDown"
+)
+INSTITUTIONAL_FUTURES_RANGE_PARSER_VERSION = (
+    "taifex-institutional-futures-oi-range-csv@0.1"
+)
+_RANGE_INSTITUTIONS = {"外資及陸資", "外資"}
 
 
 class InstitutionalFuturesFetchError(RuntimeError):
@@ -158,6 +179,230 @@ def collect_institutional_futures_latest(
     return results
 
 
+def parse_institutional_futures_range_payload(
+    payload: bytes,
+    *,
+    source_url: str = INSTITUTIONAL_FUTURES_RANGE_ENDPOINT,
+    source_payload_hash: str | None = None,
+    retrieved_at: str | None = None,
+    ingested_at: str | None = None,
+    parser_version: str = INSTITUTIONAL_FUTURES_RANGE_PARSER_VERSION,
+) -> list[Observation]:
+    """Parse the date-range CSV download into one row per trading date.
+
+    The response covers every institution category and contract selected by
+    the query; this keeps only the foreign/mainland investor row for the
+    requested contract, matching the OpenAPI snapshot's filter so both paths
+    populate the same ``values`` schema.
+    """
+
+    computed_hash = payload_sha256(payload)
+    if source_payload_hash is not None and source_payload_hash != computed_hash:
+        raise InstitutionalFuturesParseError(
+            "institutional futures range payload hash does not match response"
+        )
+    payload_hash = source_payload_hash or computed_hash
+    retrieved = retrieved_at or _utc_now()
+    ingested = ingested_at or _utc_now()
+    try:
+        text = payload.decode("cp950")
+    except UnicodeDecodeError as exc:
+        raise InstitutionalFuturesParseError(
+            "institutional futures range response is not valid CP950 text"
+        ) from exc
+    stripped = text.strip()
+    if not stripped:
+        return []
+
+    rows = list(csv.reader(io.StringIO(stripped)))
+    if not rows:
+        return []
+    header, *data_rows = rows
+    expected_header = [
+        "日期",
+        "商品名稱",
+        "身份別",
+        "多方交易口數",
+        "多方交易契約金額(千元)",
+        "空方交易口數",
+        "空方交易契約金額(千元)",
+        "多空交易口數淨額",
+        "多空交易契約金額淨額(千元)",
+        "多方未平倉口數",
+        "多方未平倉契約金額(千元)",
+        "空方未平倉口數",
+        "空方未平倉契約金額(千元)",
+        "多空未平倉口數淨額",
+        "多空未平倉契約金額淨額(千元)",
+    ]
+    if [column.strip() for column in header] != expected_header:
+        raise InstitutionalFuturesParseError(
+            "institutional futures range response has an unexpected header"
+        )
+
+    observations: list[Observation] = []
+    seen_dates: set[str] = set()
+    for line_number, row in enumerate(data_rows, start=2):
+        if not row or not row[0].strip():
+            continue
+        if len(row) != len(expected_header):
+            raise InstitutionalFuturesParseError(
+                f"institutional futures range row {line_number} has "
+                f"{len(row)} columns, expected {len(expected_header)}"
+            )
+        institution = row[2].strip()
+        if institution not in _RANGE_INSTITUTIONS:
+            continue
+        source_date = row[0].strip()
+        observation_date = _normalize_slash_date(source_date)
+        if observation_date in seen_dates:
+            raise InstitutionalFuturesParseError(
+                f"institutional futures range row {line_number} repeats "
+                f"date {observation_date!r}"
+            )
+        seen_dates.add(observation_date)
+        values = {
+            "contract_code": row[1].strip(),
+            "institution": institution,
+            "trading_volume_long": _range_number(row[3], "trading_volume_long"),
+            "trading_volume_short": _range_number(row[5], "trading_volume_short"),
+            "trading_volume_net": _range_number(row[7], "trading_volume_net"),
+            "open_interest_long": _range_number(row[9], "open_interest_long"),
+            "open_interest_short": _range_number(row[11], "open_interest_short"),
+            "open_interest_net": _range_number(row[13], "open_interest_net"),
+            "open_interest_net_value_thousands": _range_number(
+                row[14], "open_interest_net_value_thousands"
+            ),
+            "unit": "contracts",
+        }
+        observations.append(
+            Observation(
+                dataset_id=INSTITUTIONAL_FUTURES_DATASET_ID,
+                schema_version="0.1",
+                observation_date=observation_date,
+                source_date=source_date,
+                source_name=INSTITUTIONAL_FUTURES_SOURCE_NAME,
+                source_url=source_url,
+                source_record_key=INSTITUTIONAL_FUTURES_SOURCE_RECORD_KEY,
+                retrieved_at=retrieved,
+                ingested_at=ingested,
+                source_payload_hash=payload_hash,
+                parser_version=parser_version,
+                values=values,
+                quality_status="available",
+                publication_label=f"day:{observation_date}",
+            )
+        )
+    return observations
+
+
+def fetch_institutional_futures_range(
+    start: date,
+    end: date,
+    *,
+    contract_code: str = "TXF",
+    http_post: Callable[[str, Mapping[str, str]], bytes] | None = None,
+    parser_version: str = INSTITUTIONAL_FUTURES_RANGE_PARSER_VERSION,
+) -> list[Observation]:
+    """Fetch and parse the foreign TX position for a date range.
+
+    ``start``/``end`` must fall inside the source's own rolling window
+    (roughly the most recent three years); the server returns an HTML error
+    page instead of CSV once any part of the request falls outside it, which
+    raises :class:`InstitutionalFuturesParseError` here. Callers backfilling
+    close to the window's older edge should leave a few days of margin
+    rather than targeting the exact theoretical boundary.
+    """
+
+    if start > end:
+        raise ValueError("start must not be after end")
+    today = datetime.now(timezone.utc).date()
+    form = {
+        "firstDate": _three_years_before(today).strftime("%Y/%m/%d 00:00"),
+        "lastDate": today.strftime("%Y/%m/%d 00:00"),
+        "queryStartDate": start.strftime("%Y/%m/%d"),
+        "queryEndDate": end.strftime("%Y/%m/%d"),
+        "commodityId": contract_code,
+    }
+    try:
+        payload = (http_post or _http_post)(INSTITUTIONAL_FUTURES_RANGE_ENDPOINT, form)
+    except Exception as exc:
+        if isinstance(exc, InstitutionalFuturesParseError):
+            raise
+        raise InstitutionalFuturesFetchError(
+            "institutional futures range request failed"
+        ) from exc
+    if not isinstance(payload, bytes):
+        raise InstitutionalFuturesFetchError(
+            "institutional futures range response is not bytes"
+        )
+    return parse_institutional_futures_range_payload(
+        payload,
+        source_payload_hash=payload_sha256(payload),
+        parser_version=parser_version,
+    )
+
+
+def collect_institutional_futures_range(
+    store: ObservationStore,
+    start: date,
+    end: date,
+    *,
+    contract_code: str = "TXF",
+    http_post: Callable[[str, Mapping[str, str]], bytes] | None = None,
+    parser_version: str = INSTITUTIONAL_FUTURES_RANGE_PARSER_VERSION,
+) -> list[WriteResult]:
+    """Fetch a date range once and persist it with revision lineage."""
+
+    observations = fetch_institutional_futures_range(
+        start,
+        end,
+        contract_code=contract_code,
+        http_post=http_post,
+        parser_version=parser_version,
+    )
+    results: list[WriteResult] = []
+    for observation in observations:
+        previous_id = _latest_observation_id(store, observation)
+        if previous_id is not None:
+            observation = replace(observation, supersedes_id=previous_id)
+        results.append(store.write_observation(observation))
+    return results
+
+
+def _three_years_before(value: date) -> date:
+    try:
+        return value.replace(year=value.year - 3)
+    except ValueError:
+        # value is Feb 29 on a leap year; three years back is never a leap year.
+        return value.replace(month=2, day=28, year=value.year - 3)
+
+
+def _normalize_slash_date(value: str) -> str:
+    parts = value.split("/")
+    if len(parts) != 3:
+        raise InstitutionalFuturesParseError(f"unsupported official date {value!r}")
+    try:
+        return date(int(parts[0]), int(parts[1]), int(parts[2])).isoformat()
+    except ValueError as exc:
+        raise InstitutionalFuturesParseError(
+            f"invalid official date {value!r}"
+        ) from exc
+
+
+def _range_number(raw: str, field: str) -> float:
+    text = raw.strip()
+    if text == "" or text in {"-", "--", "N/A"}:
+        raise InstitutionalFuturesParseError(f"field {field!r} is unavailable")
+    try:
+        value = float(text.replace(",", ""))
+    except ValueError as exc:
+        raise InstitutionalFuturesParseError(f"field {field!r} is not numeric") from exc
+    if not math.isfinite(value):
+        raise InstitutionalFuturesParseError(f"field {field!r} is not finite")
+    return value
+
+
 def _normalize_date(value: str) -> str:
     if len(value) != 8 or not value.isdigit():
         raise InstitutionalFuturesParseError(f"unsupported official date {value!r}")
@@ -240,16 +485,41 @@ def _http_get(url: str) -> bytes:
         ) from exc
 
 
+def _http_post(url: str, data: Mapping[str, str]) -> bytes:
+    request = Request(
+        url,
+        data=urlencode(data).encode("ascii"),
+        headers={
+            "Accept": "text/csv,text/plain",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": "HudaTaiwanQuant/0.1",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=30) as response:
+            return response.read()
+    except (HTTPError, URLError, OSError) as exc:
+        raise InstitutionalFuturesFetchError(
+            "institutional futures range request failed"
+        ) from exc
+
+
 __all__ = [
     "INSTITUTIONAL_FUTURES_DATASET_ID",
     "INSTITUTIONAL_FUTURES_ENDPOINT",
     "INSTITUTIONAL_FUTURES_PARSER_VERSION",
+    "INSTITUTIONAL_FUTURES_RANGE_ENDPOINT",
+    "INSTITUTIONAL_FUTURES_RANGE_PARSER_VERSION",
     "INSTITUTIONAL_FUTURES_SOURCE_NAME",
     "INSTITUTIONAL_FUTURES_SOURCE_RECORD_KEY",
     "InstitutionalFuturesFetchError",
     "InstitutionalFuturesParseError",
     "collect_institutional_futures_latest",
+    "collect_institutional_futures_range",
     "fetch_institutional_futures_latest",
+    "fetch_institutional_futures_range",
     "parse_institutional_futures_payload",
+    "parse_institutional_futures_range_payload",
     "payload_sha256",
 ]

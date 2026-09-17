@@ -141,3 +141,9 @@ TAIFEX [E-Data Shop VIX 新版歷史商品](https://edatashop.taifex.com.tw/zh/p
 - [TAIFEX E-Data Shop VIX 新版歷史商品](https://edatashop.taifex.com.tw/zh/product/detail/40283ab7890b3664018924255bf2000f)
 - [TAIFEX TX 最後結算價資料起始月份註記](https://www.taifex.com.tw/cht/5/futIndxFSP)
 - [TWSE 60 週年特刊：交易制度沿革（星期六交易至民國 90 年）](https://www.twse.com.tw/staticFiles/product/publication/twse60/P5.pdf)
+
+## 日級資料品質報告與行事曆邊界
+
+新增 `python -m scripts.report_taifex_quality` 產生唯讀的日級 coverage／reconciliation JSON。輸入的 `datasets` 必須只包含 PCR probe、TX parser 或 VIX collector 實際回傳的日列；報告會保留各資料集的 `earliest_date`、`latest_date`、空列（`empty_dates`）、重複日（`duplicate_dates`）、品質狀態計數與 gate 結果。TX 同一交易日的不同契約／到期月份／盤別應以 `source_record_key` 區分，不能把合法的多契約列誤判為重複。
+
+只有明確提供官方交易日曆日期清單時，報告才會計算 `missing_dates`、`unexpected_dates` 與 coverage 分母。未取得官方行事曆時，`calendar_boundary.status` 保留為 `unknown`、`missing_dates` 保留為 `null`、gate 為 `unknown`；工具不以平日規則、日期連續區間或前後資料推導交易日，也不把空列補成零值或有效觀察。現階段 1998 TX 邊界及跨完整歷史的逐日行事曆仍屬 unknown。

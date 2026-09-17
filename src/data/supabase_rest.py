@@ -8,6 +8,8 @@ created once with the SQL migration in ``src/data/sql/001_observations.sql``.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any, Self
 
 import requests
@@ -21,6 +23,14 @@ from .storage import (
     _validate_observation,
     base_identity_fields,
 )
+
+
+@dataclass(frozen=True)
+class MarketScoreWriteResult:
+    """Outcome of writing a derived Market Score row."""
+
+    score_id: int
+    action: str
 
 
 class SupabaseRestObservationStore:
@@ -65,6 +75,82 @@ class SupabaseRestObservationStore:
             f"/{table_name}",
             params={"select": "id", "limit": "0"},
         )
+
+    def list_observations(
+        self,
+        *,
+        dataset_ids: Sequence[str] | None = None,
+        limit: int = 5000,
+    ) -> list[Observation]:
+        """Load source observations for a point-in-time factor calculation."""
+
+        if limit < 1 or limit > 10_000:
+            raise ValueError("limit must be between 1 and 10000")
+        params: dict[str, Any] = {
+            "select": "*",
+            "order": "observation_date.asc,id.asc",
+            "limit": str(limit),
+        }
+        if dataset_ids:
+            names = [
+                dataset_id
+                for dataset_id in dataset_ids
+                if re.fullmatch(r"[A-Za-z0-9_.-]+", dataset_id)
+            ]
+            if len(names) != len(dataset_ids):
+                raise ValueError("dataset_ids contain an invalid identifier")
+            params["dataset_id"] = f"in.({','.join(names)})"
+        rows = self._request("GET", "/observations", params=params)
+        return [_observation_from_row(row) for row in rows]
+
+    def write_market_score(self, record: Mapping[str, Any]) -> MarketScoreWriteResult:
+        """Insert one derived result or return duplicate for the same hash."""
+
+        required = {
+            "model_version",
+            "target_date",
+            "status",
+            "calculation_hash",
+            "factor_scores_json",
+            "observation_identities_json",
+        }
+        missing = sorted(field for field in required if field not in record)
+        if missing:
+            raise ValueError(
+                f"market score record missing fields: {', '.join(missing)}"
+            )
+        identity_params = {
+            "model_version": f"eq.{record['model_version']}",
+            "target_date": f"eq.{record['target_date']}",
+            "calculation_hash": f"eq.{record['calculation_hash']}",
+            "select": "id",
+            "limit": "1",
+        }
+        existing = self._request("GET", "/market_scores", params=identity_params)
+        if existing:
+            return MarketScoreWriteResult(int(existing[0]["id"]), "duplicate")
+
+        payload = {
+            "model_version": record["model_version"],
+            "target_date": record["target_date"],
+            "as_of": record.get("as_of"),
+            "status": record["status"],
+            "score": record.get("score"),
+            "direction": record.get("direction"),
+            "reason": record.get("reason"),
+            "calculation_hash": record["calculation_hash"],
+            "factor_scores_json": record["factor_scores_json"],
+            "observation_identities_json": record["observation_identities_json"],
+        }
+        inserted = self._request(
+            "POST",
+            "/market_scores",
+            json_body=payload,
+            prefer="return=representation",
+        )
+        if not inserted:
+            raise RuntimeError("Supabase did not return the inserted market score")
+        return MarketScoreWriteResult(int(inserted[0]["id"]), "inserted")
 
     def close(self) -> None:
         self._session.close()
@@ -216,4 +302,4 @@ class SupabaseRestObservationStore:
         return response.json()
 
 
-__all__ = ["SupabaseRestObservationStore"]
+__all__ = ["MarketScoreWriteResult", "SupabaseRestObservationStore"]

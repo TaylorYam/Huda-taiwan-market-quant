@@ -15,3 +15,9 @@ creates the PostgreSQL table with value-state checks, a latest-date index and
 RLS enabled. Applying the migration to Supabase is a separate remote operation;
 this commit does not contain credentials or claim that the remote table has
 already been created.
+
+`SupabaseRestObservationStore.write_market_score()` checks the three-part
+identity `(model_version, target_date, calculation_hash)` before inserting. A
+replay returns `duplicate`; a changed calculation is inserted as a separate
+row for auditability. `persist_market_score()` is the storage-neutral adapter
+used by an eventual daily workflow.

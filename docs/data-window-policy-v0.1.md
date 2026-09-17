@@ -155,6 +155,14 @@ Taiwan VIX 與法人期貨 OI（外資台指期淨部位、淨部位 5 日變化
 
 **v0.1 決定**：2010 在不付費、不改變模型必要因子設計的前提下不可達，維持 out of scope。但共同起點回到約 2023 年是免費且可行的，屬於獨立的實作待辦——幫 `taifex_vix.py`、`taifex_institutional.py` 加上使用 `futContractsDateDown`／`GetStockDayPrices` 的一次性回補邏輯。這項工作有時效性：rolling window 會持續往前捲動，愈晚做能拿到的歷史愈短。
 
+## 後續進度（2026-09-17 稍後）：VIX／法人期貨 OI 回補已實作；外資現貨因子解除大部分閘門
+
+上述一次性回補邏輯已實作（`fetch_vix_range`／`fetch_institutional_futures_range` 與對應的 `scripts/backfill_taifex_*_range.py`），待實際執行回補後即可把這兩個因子的 `earliest_date` 從 2026-09 改善到約 2023-09。
+
+同一天另外解除了外資現貨因子（15% 權重）的版本定義閘門：查證發現 BFI82U 的鉅額交易口徑在 2004-04-07（不含鉅額）與 2008-06-05（含鉅額）之間轉換過，轉換後到 2026-09-14 為止 18 年樣本皆與 FMTQIK 一致；因此設定 `FOREIGN_CASH_VERIFIED_START = 2010-01-01`，該日期後的資料可正常計算。詳見 [`phase0-cash-factor-source-verification-v0.1.md`](phase0-cash-factor-source-verification-v0.1.md)。
+
+**這不改變本文件先前的結論**：外資現貨因子的 2010 起點早於 VIX／法人期貨 OI 的 ~2023 起點，因此共同起點的瓶頸仍然是 VIX 與法人期貨 OI，不是外資現貨。8 個因子中，目前只有法人期貨 OI／VIX 的歷史回補尚未實際執行；其餘因子（含外資現貨）在有原始資料的前提下都已能正常算分——已用合成資料端對端驗證，`missing_factor_ids` 可以完全清空。
+
 ---
 
 ## Probe 結果與下一步

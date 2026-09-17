@@ -6,6 +6,7 @@ from hashlib import sha256
 from src.data.storage import Observation
 from src.factors.contracts import (
     BASIS_FACTOR_ID,
+    FOREIGN_CASH_FACTOR_ID,
     FOREIGN_TX_CHANGE_FACTOR_ID,
     FOREIGN_TX_POSITION_FACTOR_ID,
     MOMENTUM_FACTOR_ID,
@@ -173,6 +174,61 @@ def test_vix_uses_a_shorter_window_than_the_other_factors() -> None:
 
     assert 999 / 333 in history[PCR_FACTOR_ID]
     assert 987.0 not in history[VIX_FACTOR_ID]
+
+
+def test_foreign_cash_history_requires_both_sources_and_a_full_5day_window() -> None:
+    taiex, pcr, tx, institutional = _dense_fixtures(TARGET, span_days=25)
+    vix = [
+        _observation(
+            "taifex_taiwan_vix_close_v1",
+            TARGET - timedelta(days=offset),
+            {"close": 20},
+            "VIX",
+        )
+        for offset in range(25, -1, -1)
+    ]
+    cash = [
+        _observation(
+            "twse_foreign_cash_bfi82u_v1",
+            TARGET - timedelta(days=offset),
+            {"net_buy_sell": -1000.0, "category": "外資及陸資"},
+            "BFI82U:foreign",
+        )
+        for offset in range(25, -1, -1)
+    ]
+    turnover = [
+        _observation(
+            "twse_market_turnover_fmtqik_v1",
+            TARGET - timedelta(days=offset),
+            {"turnover": 100_000.0},
+            "FMTQIK:market",
+        )
+        for offset in range(25, -1, -1)
+    ]
+
+    without_cash = build_historical_values(
+        taiex_observations=taiex,
+        pcr_observations=pcr,
+        tx_observations=tx,
+        vix_observations=vix,
+        institutional_observations=institutional,
+        target_date=TARGET,
+    )
+    assert FOREIGN_CASH_FACTOR_ID not in without_cash
+
+    with_cash = build_historical_values(
+        taiex_observations=taiex,
+        pcr_observations=pcr,
+        tx_observations=tx,
+        vix_observations=vix,
+        institutional_observations=institutional,
+        cash_observations=cash,
+        turnover_observations=turnover,
+        target_date=TARGET,
+    )
+    # 25 candidate dates, minus the first 4 which cannot form a full 5-day
+    # trailing window yet (warm-up), leaves 21 available points.
+    assert len(with_cash[FOREIGN_CASH_FACTOR_ID]) == 21
 
 
 def test_omits_factor_ids_with_zero_available_points() -> None:

@@ -25,6 +25,8 @@ PCR_DATASET_ID = "taifex_txo_oi_pcr_v1"
 TX_DATASET_ID = "taifex_tx_daily_contract_v1"
 VIX_DATASET_ID = "taifex_taiwan_vix_close_v1"
 INSTITUTIONAL_FUTURES_DATASET_ID = "taifex_institutional_futures_oi_v1"
+FOREIGN_CASH_DATASET_ID = "twse_foreign_cash_bfi82u_v1"
+MARKET_TURNOVER_DATASET_ID = "twse_market_turnover_fmtqik_v1"
 
 TREND_FACTOR_ID = "taiex_ma20_ma60_trend"
 MOMENTUM_FACTOR_ID = "taiex_20d_momentum"
@@ -376,6 +378,110 @@ def adapt_vix_input(
     )
 
 
+def adapt_foreign_cash_input(
+    cash_observations: Sequence[ObservationLike],
+    turnover_observations: Sequence[ObservationLike],
+    target_date: date | str,
+    *,
+    as_of: date | datetime | str | None = None,
+    as_of_policy: AsOfPolicy = "observation_date",
+) -> FactorInput:
+    """Adapt BFI82U foreign net buy/sell and FMTQIK turnover into a 5-day ratio.
+
+    ``foreign5d = sum(foreign net buy/sell over the last 5 available BFI82U
+    dates) / sum(FMTQIK turnover for those same 5 dates)``. Both series must
+    have a value for every one of those 5 dates; a gap on either side leaves
+    the factor unavailable rather than computing the ratio over a shorter or
+    misaligned window. Callers are expected to only supply BFI82U
+    observations on or after ``FOREIGN_CASH_VERIFIED_START``
+    (src/data/twse_foreign_cash.py); this adapter does not re-check that
+    date itself, since it is enforced where the data is collected.
+    """
+
+    target = _as_date(target_date)
+    cash_selected = _daily_observations(
+        cash_observations,
+        dataset_id=FOREIGN_CASH_DATASET_ID,
+        target_date=target,
+        as_of=as_of,
+        as_of_policy=as_of_policy,
+    )
+    turnover_selected = _daily_observations(
+        turnover_observations,
+        dataset_id=MARKET_TURNOVER_DATASET_ID,
+        target_date=target,
+        as_of=as_of,
+        as_of_policy=as_of_policy,
+    )
+    cash_rows = sorted(cash_selected.items(), key=lambda item: item[0])
+    if not cash_rows or cash_rows[-1][0] != target:
+        reason = _missing_reason(
+            cash_observations, FOREIGN_CASH_DATASET_ID, target, as_of
+        )
+        return _unavailable(FOREIGN_CASH_FACTOR_ID, target, as_of, reason)
+
+    window = cash_rows[-5:]
+    if len(window) < 5:
+        return _warm_up(
+            FOREIGN_CASH_FACTOR_ID,
+            target,
+            as_of,
+            reason="requires_5_available_foreign_cash_observations",
+            identities=tuple(observation_identity(row) for _, row in window),
+            window_start=window[0][0] if window else None,
+        )
+
+    net_total = 0.0
+    turnover_total = 0.0
+    identities: list[ObservationIdentity] = []
+    for day, cash_row in window:
+        net = _number(cash_row, "net_buy_sell")
+        turnover_row = turnover_selected.get(day)
+        turnover = (
+            _number(turnover_row, "turnover") if turnover_row is not None else None
+        )
+        if net is None or turnover_row is None or turnover is None:
+            identities.append(observation_identity(cash_row))
+            if turnover_row is not None:
+                identities.append(observation_identity(turnover_row))
+            return _unavailable(
+                FOREIGN_CASH_FACTOR_ID,
+                target,
+                as_of,
+                "foreign_cash_or_market_turnover_unavailable_for_window_date",
+                tuple(identities),
+            )
+        net_total += net
+        turnover_total += turnover
+        identities.append(observation_identity(cash_row))
+        identities.append(observation_identity(turnover_row))
+
+    if turnover_total == 0:
+        return _unavailable(
+            FOREIGN_CASH_FACTOR_ID,
+            target,
+            as_of,
+            "market_5d_turnover_zero",
+            tuple(identities),
+        )
+    ratio = net_total / turnover_total
+    return FactorInput(
+        factor_id=FOREIGN_CASH_FACTOR_ID,
+        observation_date=target.isoformat(),
+        status=FACTOR_AVAILABLE,
+        value=ratio,
+        values={
+            "foreign_5d_net": net_total,
+            "market_5d_turnover": turnover_total,
+            "ratio": ratio,
+        },
+        observation_identities=tuple(identities),
+        as_of=_as_of_text(as_of),
+        window_start=window[0][0].isoformat(),
+        window_end=target.isoformat(),
+    )
+
+
 def adapt_v01_inputs(
     *,
     taiex_observations: Sequence[ObservationLike],
@@ -383,6 +489,8 @@ def adapt_v01_inputs(
     tx_observations: Sequence[ObservationLike],
     vix_observations: Sequence[ObservationLike],
     institutional_observations: Sequence[ObservationLike] | None = None,
+    cash_observations: Sequence[ObservationLike] | None = None,
+    turnover_observations: Sequence[ObservationLike] | None = None,
     target_date: date | str,
     as_of: date | datetime | str | None = None,
     as_of_policy: AsOfPolicy = "observation_date",
@@ -421,12 +529,21 @@ def adapt_v01_inputs(
             as_of_policy=as_of_policy,
         )
     )
-    result[FOREIGN_CASH_FACTOR_ID] = _unavailable(
-        FOREIGN_CASH_FACTOR_ID,
-        _as_date(target_date),
-        as_of,
-        "foreign_cash_amount_source_contract_unresolved",
-    )
+    if cash_observations and turnover_observations:
+        result[FOREIGN_CASH_FACTOR_ID] = adapt_foreign_cash_input(
+            cash_observations,
+            turnover_observations,
+            target_date,
+            as_of=as_of,
+            as_of_policy=as_of_policy,
+        )
+    else:
+        result[FOREIGN_CASH_FACTOR_ID] = _unavailable(
+            FOREIGN_CASH_FACTOR_ID,
+            _as_date(target_date),
+            as_of,
+            "foreign_cash_amount_source_contract_unresolved",
+        )
     return result
 
 
@@ -435,6 +552,7 @@ adapt_technical = adapt_technical_inputs
 adapt_pcr = adapt_pcr_input
 adapt_tx = adapt_tx_inputs
 adapt_vix = adapt_vix_input
+adapt_foreign_cash = adapt_foreign_cash_input
 
 
 def _field(observation: ObservationLike, name: str) -> Any:
@@ -742,10 +860,12 @@ __all__ = [
     "FACTOR_AVAILABLE",
     "FACTOR_UNAVAILABLE",
     "FACTOR_WARM_UP",
+    "FOREIGN_CASH_DATASET_ID",
     "FOREIGN_CASH_FACTOR_ID",
     "FOREIGN_TX_CHANGE_FACTOR_ID",
     "FOREIGN_TX_POSITION_FACTOR_ID",
     "INSTITUTIONAL_FUTURES_DATASET_ID",
+    "MARKET_TURNOVER_DATASET_ID",
     "MOMENTUM_FACTOR_ID",
     "PCR_FACTOR_ID",
     "TREND_FACTOR_ID",
@@ -754,6 +874,8 @@ __all__ = [
     "FactorInput",
     "FactorStatus",
     "ObservationIdentity",
+    "adapt_foreign_cash",
+    "adapt_foreign_cash_input",
     "adapt_pcr",
     "adapt_pcr_input",
     "adapt_technical",

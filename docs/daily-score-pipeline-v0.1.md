@@ -82,8 +82,13 @@ redacts exceptions because upstream transport errors may contain credentials.
 
 ### Current result limitations
 
-- Foreign cash (15%): the BFI82U/FMTQIK amount, revision, classification and
-  trading-scope gate remains unresolved; it is never filled with T86 shares.
+- Foreign cash (15%): `adapt_foreign_cash_input` combines free BFI82U (foreign
+  net buy/sell) and FMTQIK (market turnover) into the 5-day ratio, but only
+  for dates on or after `FOREIGN_CASH_VERIFIED_START` (2010-01-01); it is
+  never filled with T86 shares. Dates before that stay unavailable, and the
+  runner needs both `src/data/twse_foreign_cash.py` and
+  `src/data/twse_market_turnover.py` to have collected data for all 5 window
+  dates or the factor stays unavailable rather than using a partial window.
 - Foreign TX OI (15% position + 10% five-day change): the existing adapter is
   connected, but usable snapshots and six observations for the five-day change
   are needed. No rows, stale rows, or insufficient lookback remain unavailable.
@@ -92,9 +97,10 @@ redacts exceptions because upstream transport errors may contain credentials.
   factor's own point-in-time adapter over every eligible date strictly before
   the target within a trailing window (3 years by default, 1 year for VIX,
   per `docs/factor-model-v0.1.md`'s initial assumption). This makes momentum,
-  PCR, basis, VIX and the foreign TX position/change factors scoreable once
-  enough raw history exists; it does not change the raw-input gates above, and
-  the window length itself is still an unconfirmed v0.1 hypothesis pending
+  PCR, basis, VIX, foreign cash and the foreign TX position/change factors
+  scoreable once enough raw history exists; it does not change the raw-input
+  gates above, and the window length itself is still an unconfirmed v0.1
+  hypothesis pending
   the Phase 3 backtest in `docs/backtest-spec-v0.1.md`. PCR also retains its
   existing model-policy gate on direction/threshold. Foreign cash stays
   unavailable regardless, since it has no raw input to build a history from.

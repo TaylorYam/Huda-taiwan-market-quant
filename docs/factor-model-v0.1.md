@@ -117,11 +117,11 @@
 
 再與歷史資料比較轉成 0–100 分。
 
-分子須使用新台幣金額；免費 T86 的股數欄位不得代替。免費 BFI82U 已確認提供金額日報，但歷史分類、鉅額交易／綜合帳戶版本與 FMTQIK 分母尚待逐日核對。來源與欄位語義見 [`data-contract-v0.1.md`](data-contract-v0.1.md) 及 [`phase0-source-research-v0.1.md`](phase0-source-research-v0.1.md)。
+分子須使用新台幣金額；免費 T86 的股數欄位不得代替。分子為免費 BFI82U 的外資（及陸資）淨買賣金額，不含另列的外資自營商；分母為免費 FMTQIK 的市場成交金額。來源與欄位語義見 [`data-contract-v0.1.md`](data-contract-v0.1.md) 及 [`phase0-source-research-v0.1.md`](phase0-source-research-v0.1.md)。
 
 目的：避免不同成交量環境下，同樣買賣超金額代表不同實際力道。
 
-來源閘門：免費 BFI82U 與 FMTQIK 的候選資料在歷史交易範圍及外資分類上尚未證實跨期一致，E-Shop 檔案碼與 14:50／19:40 版次對應也未知。在來源版次、分類與交易範圍政策定案前，不得把此因子計為可用歷史觀察；查證證據見 [TWSE 現貨金額因子來源查證](phase0-cash-factor-source-verification-v0.1.md)及 [Issue #5](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/5)。
+**來源閘門（2026-09-17 更新，部分解除）**：BFI82U 的鉅額交易認定口徑曾經改變——2004-04-07 樣本明載不含鉅額，但 2008-06-05、2015-06-15、2022-10-24、2026-09-14 四個樣本皆為含鉅額，與 FMTQIK 一致，橫跨 18 年。因此因子改為**允許使用 `FOREIGN_CASH_VERIFIED_START`（2010-01-01）之後的資料**，早於此日期的觀察仍視為不可用，因為口徑轉換的確切日期、2004 年前後的分類轉換與 E-Shop 14:50／19:40 版次對應仍未解決。實作於 [`src/data/twse_foreign_cash.py`](../src/data/twse_foreign_cash.py)、[`src/data/twse_market_turnover.py`](../src/data/twse_market_turnover.py) 及 [`adapt_foreign_cash_input`](../src/factors/contracts.py)；查證證據見 [TWSE 現貨金額因子來源查證](phase0-cash-factor-source-verification-v0.1.md)及 [Issue #5](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/5)。
 
 ### 5.4 外資台指期淨多空部位 — 15%
 

@@ -95,6 +95,8 @@ def calculate_daily_score(
     tx_observations: Sequence[Any],
     vix_observations: Sequence[Any],
     institutional_observations: Sequence[Any] | None = None,
+    cash_observations: Sequence[Any] | None = None,
+    turnover_observations: Sequence[Any] | None = None,
     target_date: date | str,
     as_of: date | datetime | str | None = None,
     as_of_policy: AsOfPolicy = "observation_date",
@@ -106,7 +108,10 @@ def calculate_daily_score(
     ``historical_values`` is keyed by factor id and must contain only values
     known at the selected as-of boundary.  Omitting a history leaves that
     percentile-based factor explicitly unavailable; it never silently becomes
-    a neutral score.
+    a neutral score. ``cash_observations``/``turnover_observations`` are the
+    BFI82U/FMTQIK sources for the foreign cash factor; omitting either keeps
+    it unavailable the same way omitting ``institutional_observations`` keeps
+    the foreign TX position factors unavailable.
     """
 
     target = _date_text(target_date)
@@ -117,6 +122,8 @@ def calculate_daily_score(
         tx_observations=tx_observations,
         vix_observations=vix_observations,
         institutional_observations=institutional_observations,
+        cash_observations=cash_observations,
+        turnover_observations=turnover_observations,
         target_date=target,
         as_of=as_of,
         as_of_policy=as_of_policy,

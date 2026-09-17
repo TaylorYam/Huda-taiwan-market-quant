@@ -17,6 +17,7 @@ from typing import Any
 from src.factors.contracts import (
     BASIS_FACTOR_ID,
     FACTOR_AVAILABLE,
+    FOREIGN_CASH_FACTOR_ID,
     FOREIGN_TX_CHANGE_FACTOR_ID,
     FOREIGN_TX_POSITION_FACTOR_ID,
     MOMENTUM_FACTOR_ID,
@@ -24,6 +25,7 @@ from src.factors.contracts import (
     VIX_FACTOR_ID,
     AsOfPolicy,
     FactorInput,
+    adapt_foreign_cash_input,
     adapt_pcr_input,
     adapt_technical_inputs,
     adapt_tx_inputs,
@@ -37,6 +39,7 @@ from src.factors.contracts import (
 # once Phase 3 validates score discrimination against these window lengths.
 DEFAULT_WINDOW_YEARS: Mapping[str, int] = {
     MOMENTUM_FACTOR_ID: 3,
+    FOREIGN_CASH_FACTOR_ID: 3,
     FOREIGN_TX_POSITION_FACTOR_ID: 3,
     FOREIGN_TX_CHANGE_FACTOR_ID: 3,
     BASIS_FACTOR_ID: 3,
@@ -52,6 +55,8 @@ def build_historical_values(
     tx_observations: Sequence[Any],
     vix_observations: Sequence[Any],
     institutional_observations: Sequence[Any] | None = None,
+    cash_observations: Sequence[Any] | None = None,
+    turnover_observations: Sequence[Any] | None = None,
     target_date: date | str,
     as_of: date | datetime | str | None = None,
     as_of_policy: AsOfPolicy = "observation_date",
@@ -86,11 +91,14 @@ def build_historical_values(
                 tx_observations,
                 vix_observations,
                 institutional_observations or (),
+                cash_observations or (),
+                turnover_observations or (),
             )
             for observation in group
             if earliest_start <= (candidate := _observation_date(observation)) < target
         }
     )
+    has_cash_sources = bool(cash_observations) and bool(turnover_observations)
 
     history: dict[str, list[float]] = {}
     for candidate in candidate_dates:
@@ -130,6 +138,21 @@ def build_historical_values(
             FOREIGN_TX_CHANGE_FACTOR_ID,
         ):
             _record(history, tx_inputs.get(factor_id), candidate, target, windows)
+
+        if has_cash_sources:
+            _record(
+                history,
+                adapt_foreign_cash_input(
+                    cash_observations,
+                    turnover_observations,
+                    candidate,
+                    as_of=as_of,
+                    as_of_policy=as_of_policy,
+                ),
+                candidate,
+                target,
+                windows,
+            )
 
     return history
 

@@ -12,7 +12,9 @@ from typing import Protocol
 from src.data.storage import Observation
 from src.data.supabase_rest import SupabaseRestObservationStore
 from src.factors.contracts import (
+    FOREIGN_CASH_DATASET_ID,
     INSTITUTIONAL_FUTURES_DATASET_ID,
+    MARKET_TURNOVER_DATASET_ID,
     PCR_DATASET_ID,
     TAIEX_DATASET_ID,
     TX_DATASET_ID,
@@ -28,6 +30,8 @@ DATASETS = (
     TX_DATASET_ID,
     VIX_DATASET_ID,
     INSTITUTIONAL_FUTURES_DATASET_ID,
+    FOREIGN_CASH_DATASET_ID,
+    MARKET_TURNOVER_DATASET_ID,
 )
 TAIPEI = timezone(timedelta(hours=8))
 
@@ -88,6 +92,8 @@ def run_daily_score(
         tx_observations=grouped[TX_DATASET_ID],
         vix_observations=grouped[VIX_DATASET_ID],
         institutional_observations=grouped[INSTITUTIONAL_FUTURES_DATASET_ID],
+        cash_observations=grouped[FOREIGN_CASH_DATASET_ID],
+        turnover_observations=grouped[MARKET_TURNOVER_DATASET_ID],
         target_date=target,
         as_of=canonical_as_of,
     )
@@ -97,6 +103,8 @@ def run_daily_score(
         tx_observations=grouped[TX_DATASET_ID],
         vix_observations=grouped[VIX_DATASET_ID],
         institutional_observations=grouped[INSTITUTIONAL_FUTURES_DATASET_ID],
+        cash_observations=grouped[FOREIGN_CASH_DATASET_ID],
+        turnover_observations=grouped[MARKET_TURNOVER_DATASET_ID],
         target_date=target,
         as_of=canonical_as_of,
         historical_values=historical_values,

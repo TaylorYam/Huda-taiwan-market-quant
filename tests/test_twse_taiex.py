@@ -9,6 +9,7 @@ from src.data import (
     TAIEXParseError,
     build_taiex_month_url,
     collect_taiex_month,
+    collect_taiex_range,
     parse_taiex_payload,
 )
 from src.data.storage import SQLiteObservationStore
@@ -62,12 +63,82 @@ def test_parser_rejects_non_ok_or_missing_fields():
         )
 
     document = json.loads(fixture_bytes())
+    document["data"] = []
+    with pytest.raises(TAIEXParseError, match="no daily rows"):
+        parse_taiex_payload(
+            json.dumps(document, ensure_ascii=False).encode(),
+            source_url="https://example.test/taiex",
+        )
+
+    with pytest.raises(TAIEXParseError, match="hash"):
+        parse_taiex_payload(
+            fixture_bytes(),
+            source_url="https://example.test/taiex",
+            source_payload_hash="0" * 64,
+        )
+
+    document = json.loads(fixture_bytes())
     document["fields"] = ["日期", "開盤指數"]
     with pytest.raises(TAIEXParseError, match="field 'high'"):
         parse_taiex_payload(
             json.dumps(document, ensure_ascii=False).encode(),
             source_url="https://example.test/taiex",
         )
+
+
+def test_parser_rejects_wrong_month_duplicate_date_and_non_finite_values():
+    document = json.loads(fixture_bytes())
+    document["data"][1][0] = "113/02/01"
+    with pytest.raises(TAIEXParseError, match="outside response month"):
+        parse_taiex_payload(
+            json.dumps(document, ensure_ascii=False).encode(),
+            source_url="https://example.test/taiex",
+        )
+
+    document = json.loads(fixture_bytes())
+    document["data"][1][0] = document["data"][0][0]
+    with pytest.raises(TAIEXParseError, match="repeats date"):
+        parse_taiex_payload(
+            json.dumps(document, ensure_ascii=False).encode(),
+            source_url="https://example.test/taiex",
+        )
+
+    document = json.loads(fixture_bytes())
+    document["data"][0][1] = "NaN"
+    with pytest.raises(TAIEXParseError, match="not finite"):
+        parse_taiex_payload(
+            json.dumps(document, ensure_ascii=False).encode(),
+            source_url="https://example.test/taiex",
+        )
+
+
+def test_range_backfill_is_inclusive_and_chronological(tmp_path):
+    calls = []
+
+    def get(url):
+        calls.append(url)
+        document = json.loads(fixture_bytes())
+        if "20240201" in url:
+            document["date"] = "20240201"
+            document["data"] = [
+                ["113/02/01", "17,900", "18,000", "17,800", "17,950"],
+                ["113/02/02", "17,950", "18,100", "17,900", "18,050"],
+            ]
+        return json.dumps(document, ensure_ascii=False).encode()
+
+    with SQLiteObservationStore(tmp_path / "market.sqlite3") as store:
+        results = collect_taiex_range(
+            store,
+            2024,
+            1,
+            2024,
+            2,
+            http_get=get,
+        )
+
+    assert len(results) == 4
+    assert calls[0].endswith("date=20240101&response=json")
+    assert calls[1].endswith("date=20240201&response=json")
 
 
 def test_url_builder_rejects_invalid_month_and_uses_official_endpoint():

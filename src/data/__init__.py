@@ -14,6 +14,7 @@ from .twse_taiex import (
     TAIEXParseError,
     build_taiex_month_url,
     collect_taiex_month,
+    collect_taiex_range,
     fetch_taiex_month,
     parse_taiex_payload,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "WriteResult",
     "build_taiex_month_url",
     "collect_taiex_month",
+    "collect_taiex_range",
     "fetch_taiex_month",
     "parse_taiex_payload",
 ]

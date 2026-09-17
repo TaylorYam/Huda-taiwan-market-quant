@@ -6,6 +6,8 @@
 
 Phase 1 以 `SQLiteObservationStore` 實作 [ADR 0001](adr/0001-phase-1-storage-boundary.md) 的本機開發邊界；免費 MVP 另提供 `PostgresObservationStore`，連線字串由 `MARKET_DB_URL` 提供。收集器與因子層只依賴 `ObservationStore` 介面及 `Observation` 信封，不直接組 SQL 或管理資料庫 connection。PostgreSQL 初始 schema 位於 [`src/data/sql/001_observations.sql`](../src/data/sql/001_observations.sql)，adapter 初始化時可重複套用。
 
+連線驗證由 [`scripts/check_postgres.py`](../scripts/check_postgres.py) 執行；GitHub Actions 的手動 workflow [`database-schema-smoke.yml`](../.github/workflows/database-schema-smoke.yml) 使用 `MARKET_DB_URL` secret，只建立／確認 schema，不寫入市場觀察資料。
+
 ## Observation 信封
 
 `Observation` 對應 [Data Contract v0.1](data-contract-v0.1.md) 的共同欄位：資料集、交易日、官方原始來源日期／URL／列鍵、發布與有效時間、擷取／寫入時間、來源版次、64 位十六進位 payload SHA-256、parser 版本、JSON `values`、品質狀態與稽核備註。`source_date` 保留官方原字串；只有 `observation_date` 正規化為交易日。`values` 保持來源單位，空值由 `quality_status` 與 `quality_notes` 說明，不補成 0 或中性分數。

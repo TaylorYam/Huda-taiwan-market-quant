@@ -1,0 +1,28 @@
+name: Database schema smoke test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  schema:
+    name: Initialize Supabase observation schema
+    runs-on: ubuntu-latest
+    env:
+      MARKET_DB_URL: ${{ secrets.MARKET_DB_URL }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PostgreSQL client
+        run: python -m pip install --upgrade "psycopg[binary]>=3.2,<4"
+
+      - name: Initialize and verify schema
+        run: python scripts/check_postgres.py

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 from src.data import PostgresObservationStore
 
 
@@ -9,10 +7,10 @@ class FakeCursor:
     def __init__(self) -> None:
         self.statements: list[str] = []
 
-    def __enter__(self) -> "FakeCursor":
+    def __enter__(self) -> FakeCursor:
         return self
 
-    def __exit__(self, *args: Any) -> None:
+    def __exit__(self, *args: object) -> None:
         return None
 
     def execute(self, statement: str, params: object = None) -> None:

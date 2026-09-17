@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -369,6 +369,60 @@ class SQLiteObservationStore:
         if row is None:
             return None
         return _observation_from_row(row)
+
+    def export_observations(
+        self,
+        *,
+        dataset_ids: Sequence[str] | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        limit: int = 100_000,
+    ) -> list[dict[str, Any]]:
+        """Return persisted rows in a migration-friendly JSON shape.
+
+        The export keeps the SQLite storage id and ``supersedes_id`` so a
+        migration tool can rebuild revision links after inserting rows into a
+        different database.  Values are decoded from SQLite's JSON text and
+        all other fields retain their persisted representation.
+        """
+
+        if limit < 1 or limit > 1_000_000:
+            raise ValueError("limit must be between 1 and 1000000")
+        if start_date is not None:
+            _validate_date(start_date, "start_date")
+        if end_date is not None:
+            _validate_date(end_date, "end_date")
+        if start_date is not None and end_date is not None and start_date > end_date:
+            raise ValueError("start_date must not be after end_date")
+        if dataset_ids is not None:
+            for dataset_id in dataset_ids:
+                if not isinstance(dataset_id, str) or not dataset_id.strip():
+                    raise ValueError("dataset_ids must contain non-empty strings")
+
+        clauses: list[str] = []
+        parameters: list[Any] = []
+        if dataset_ids:
+            placeholders = ", ".join("?" for _ in dataset_ids)
+            clauses.append(f"dataset_id IN ({placeholders})")
+            parameters.extend(dataset_ids)
+        if start_date is not None:
+            clauses.append("observation_date >= ?")
+            parameters.append(start_date)
+        if end_date is not None:
+            clauses.append("observation_date <= ?")
+            parameters.append(end_date)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        parameters.append(limit)
+        rows = self._connection.execute(
+            f"SELECT * FROM observations {where} ORDER BY id LIMIT ?", parameters
+        ).fetchall()
+
+        exported: list[dict[str, Any]] = []
+        for row in rows:
+            record = dict(row)
+            record["values"] = json.loads(record.pop("values_json"))
+            exported.append(record)
+        return exported
 
     def list_revisions(self, observation: Observation) -> list[Observation]:
         """Return all source revisions sharing an observation's base identity."""

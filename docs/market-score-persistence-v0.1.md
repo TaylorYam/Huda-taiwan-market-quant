@@ -10,7 +10,7 @@ idempotency key for the same model, target date and input evidence. A changed
 source revision or model output creates a new hash and leaves the prior result
 available for audit and backtest comparison.
 
-The checked-in migration [`002_market_scores.sql`](../src/data/sql/002_market_scores.sql)
+The checked-in migration [`20260917000200_market_scores.sql`](../supabase/migrations/20260917000200_market_scores.sql)
 creates the PostgreSQL table with value-state checks, a latest-date index and
 RLS enabled. Applying the migration to Supabase is a separate remote operation;
 this commit does not contain credentials or claim that the remote table has

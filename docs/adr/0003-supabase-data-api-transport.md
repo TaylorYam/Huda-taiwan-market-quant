@@ -13,7 +13,7 @@ Supabase Free PostgreSQL 已選為免費 MVP 的持久化來源，但 GitHub Act
 1. Supabase Free PostgreSQL 仍是資料的持久化來源。
 2. GitHub Actions 改用 Supabase Data API／PostgREST，透過 `SUPABASE_URL` 與伺服器端 `SUPABASE_SECRET_KEY` 存取 `observations`。
 3. `SUPABASE_SECRET_KEY` 只放在 GitHub Actions secrets 或伺服器端環境變數，不放進瀏覽器、repository 或對話內容。未來 Dashboard 若只需讀取，另用 publishable key 與 RLS 設計。
-4. Schema 仍由 [`src/data/sql/001_observations.sql`](../../src/data/sql/001_observations.sql) 在 Supabase SQL Editor 建立一次；API smoke test 只確認資料表已可由 Data API 存取。
+4. Schema migration 由 [`supabase/migrations/20260917000100_observations.sql`](../../supabase/migrations/20260917000100_observations.sql) 與 [`supabase/migrations/20260917000200_market_scores.sql`](../../supabase/migrations/20260917000200_market_scores.sql) 管理；API smoke test 只確認資料表已可由 Data API 存取。
 5. `PostgresObservationStore` 保留作為未來需要直接交易式 PostgreSQL 連線時的選項；免費 MVP 不再要求 `MARKET_DB_URL`。
 
 ## Consequences

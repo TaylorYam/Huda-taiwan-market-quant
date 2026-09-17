@@ -83,6 +83,8 @@ Vercel Hobby：Dashboard 與唯讀 API
 
 本機開發仍使用被 Git 忽略的 SQLite。GitHub Actions 透過 Supabase Data API 寫入，不需要資料庫密碼；`SUPABASE_URL` 與 `SUPABASE_SECRET_KEY` 只放在 GitHub Secrets。Supabase Free 沒有託管自動備份或 PITR，Vercel Hobby 的每日 Cron 也不是精準排程器；完整限制、備份要求與升級條件見 [`docs/adr/0002-free-tier-mvp-stack.md`](docs/adr/0002-free-tier-mvp-stack.md) 與 [`docs/adr/0003-supabase-data-api-transport.md`](docs/adr/0003-supabase-data-api-transport.md)。
 
+若啟用 Supabase GitHub integration，標準 migration 位置為 [`supabase/migrations/`](supabase/migrations/)，專案設定在 [`supabase/config.toml`](supabase/config.toml)，working directory 使用 repository root（`.`）。推送或合併到 production branch 後，integration 可依 migration 檔部署 schema；目前的 Data API writer 仍由 GitHub Actions 負責。
+
 ## v0.1 核心模型
 
 第一版先使用 8 個核心因子：

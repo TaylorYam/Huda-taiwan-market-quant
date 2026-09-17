@@ -4,7 +4,7 @@
 - 日期：2026-09-16
 - 追蹤：[Issue #12](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/12)
 
-Phase 1 以 `SQLiteObservationStore` 實作 [ADR 0001](adr/0001-phase-1-storage-boundary.md) 的本機開發邊界；免費 MVP 提供 `SupabaseRestObservationStore`，使用 `SUPABASE_URL` 與 server-side `SUPABASE_SECRET_KEY` 呼叫 Data API，不需要 `MARKET_DB_URL`。`PostgresObservationStore` 仍保留作為直接 PostgreSQL 連線的後續選項。收集器與因子層只依賴 `ObservationStore` 介面及 `Observation` 信封，不直接組 SQL 或管理資料庫 connection。PostgreSQL 初始 schema 位於 [`src/data/sql/001_observations.sql`](../src/data/sql/001_observations.sql)，需先在 Supabase SQL Editor 執行一次。
+Phase 1 以 `SQLiteObservationStore` 實作 [ADR 0001](adr/0001-phase-1-storage-boundary.md) 的本機開發邊界；免費 MVP 提供 `SupabaseRestObservationStore`，使用 `SUPABASE_URL` 與 server-side `SUPABASE_SECRET_KEY` 呼叫 Data API，不需要 `MARKET_DB_URL`。`PostgresObservationStore` 仍保留作為直接 PostgreSQL 連線的後續選項。收集器與因子層只依賴 `ObservationStore` 介面及 `Observation` 信封，不直接組 SQL 或管理資料庫 connection。PostgreSQL migration 位於 [`supabase/migrations/20260917000100_observations.sql`](../supabase/migrations/20260917000100_observations.sql)，需先在 Supabase SQL Editor 執行一次。
 
 Data API 驗證由 [`scripts/check_supabase_api.py`](../scripts/check_supabase_api.py) 執行；GitHub Actions 的手動 workflow [`supabase-api-smoke.yml`](../.github/workflows/supabase-api-smoke.yml) 使用 `SUPABASE_URL` 與 `SUPABASE_SECRET_KEY`，只確認 `observations` table 已可存取，不寫入市場觀察資料。
 

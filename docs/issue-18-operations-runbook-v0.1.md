@@ -13,7 +13,7 @@
 
 Issue #18 可引用的既有證據為 [run 35191715728](https://github.com/TaylorYam/Huda-taiwan-market-quant/actions/runs/35191715728) 與 [run 35192169763](https://github.com/TaylorYam/Huda-taiwan-market-quant/actions/runs/35192169763)。兩次 run 的證據範圍是 repository 內、無外部憑證的 persistence gate：
 
-- checked-in PostgreSQL migration 具備 observation identity index、`source_payload_hash`、`retrieval_count`、`values_json` 及 `supersedes_id` 等持久化契約欄位。
+- checked-in PostgreSQL migration [`20260917000100_observations.sql`](../supabase/migrations/20260917000100_observations.sql) 具備 observation identity index、`source_payload_hash`、`retrieval_count`、`values_json` 及 `supersedes_id` 等持久化契約欄位；derived score migration 為 [`20260917000200_market_scores.sql`](../supabase/migrations/20260917000200_market_scores.sql)。
 - 臨時 SQLite store 能插入原始 observation；同一 payload 重跑會判定為 duplicate、保留同一 row 並增加 `retrieval_count`。
 - 修訂 payload 會新增 row、保存兩個 payload hash，並用 `supersedes_id` 連回前一版本；原始 observation 的值不會被改寫。
 - 這些 run 沒有證明遠端 SQL migration、Supabase Data API 權限、資料庫 backup／restore、secret rotation、配額餘裕或來源條款。run 成功不能取代下列手動 gate。
@@ -32,7 +32,7 @@ Issue #18 可引用的既有證據為 [run 35191715728](https://github.com/Taylo
 ## A. 首次建立或驗證遠端環境
 
 1. 由具備 Supabase project 管理權限的操作者登入 Supabase Dashboard，選定正式 project。確認 project 名稱、region 與 owner，將 metadata 記在 Issue #18；不要把任何 key 或連線字串貼入 issue。
-2. 開啟 **SQL Editor**，貼上 repository 的 [`src/data/sql/001_observations.sql`](../src/data/sql/001_observations.sql) 內容並執行。查詢結果只需確認 migration 成功；不要把含資料或 credentials 的畫面截圖上傳。
+2. 開啟 **SQL Editor**，貼上 repository 的 [`supabase/migrations/20260917000100_observations.sql`](../supabase/migrations/20260917000100_observations.sql) 與 [`supabase/migrations/20260917000200_market_scores.sql`](../supabase/migrations/20260917000200_market_scores.sql) 內容並執行。查詢結果只需確認 migration 成功；不要把含資料或 credentials 的畫面截圖上傳。
 3. 在 project 的 **Data API／API Settings** 檢查 `observations` 已暴露給 API。若 project 使用 table exposure 或 schema allowlist，加入必要設定後保存。
 4. 在 GitHub repository 開啟 **Settings → Secrets and variables → Actions**。建立或更新 `SUPABASE_URL` 與 `SUPABASE_SECRET_KEY` 這兩個 secret name；只在 secret 欄位輸入值，不將值寫入 workflow、issue 或 log。
 5. 開啟 **Actions → Supabase API smoke test → Run workflow**，使用預設 branch 手動執行。確認 `Verify API secrets are available` 與 `Verify observations endpoint` 都成功；只記錄 run URL、日期與結果。

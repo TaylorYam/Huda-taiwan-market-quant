@@ -22,9 +22,11 @@ snapshot: ``observation_date`` is always required, and a present
 backfills.
 
 Rolling/expanding history (docs/backtest-spec-v0.1.md#5) still applies: each
-day's percentile history is rebuilt by :func:`src.scoring.history.build_historical_values`
-from only the observations dated before that day, never precomputed once
-over the full period and backfilled.
+day's percentile history uses only observations dated before that day, never a
+full-period distribution backfilled into the past.  The replay uses an
+equivalent rolling cache for bulk rows without publication timestamps and
+retains the reference ``build_historical_values`` path when published
+revisions require a per-target knowledge boundary.
 """
 
 from __future__ import annotations
@@ -37,7 +39,11 @@ from itertools import pairwise
 from statistics import median
 from typing import Any
 
-from src.factors.contracts import FACTOR_AVAILABLE, TAIEX_DATASET_ID
+from src.factors.contracts import (
+    FACTOR_AVAILABLE,
+    TAIEX_DATASET_ID,
+    adapt_v01_inputs,
+)
 from src.scoring.contracts import (
     BEAR,
     BULL,
@@ -47,7 +53,7 @@ from src.scoring.contracts import (
     STRONG_BULL,
     classify_score,
 )
-from src.scoring.history import build_historical_values
+from src.scoring.history import DEFAULT_WINDOW_YEARS, build_historical_values
 from src.scoring.pipeline import DailyScoreResult, calculate_daily_score
 
 FORWARD_RETURN_HORIZONS: tuple[int, ...] = (5, 10, 20)
@@ -250,6 +256,106 @@ def _timestamp_date(value: str) -> date | None:
         return None
 
 
+def _has_publication_timestamps(groups: Sequence[Sequence[Any]]) -> bool:
+    """Whether the replay must retain per-target publication filtering."""
+
+    return any(
+        _optional_text(observation, "published_at") is not None
+        for group in groups
+        for observation in group
+    )
+
+
+def _replay_years_before(value: date, years: int) -> date:
+    try:
+        return value.replace(year=value.year - years)
+    except ValueError:
+        return value.replace(month=2, day=28, year=value.year - years)
+
+
+def _build_score_series_incremental(
+    *,
+    groups: Mapping[str, Sequence[Any]],
+    target_days: Sequence[date],
+    start: date,
+    end: date,
+    window_years: Mapping[str, int] | None,
+) -> list[DailyScoreResult]:
+    """Replay bulk rows in one chronological pass when no revisions publish late.
+
+    ``build_historical_values`` is intentionally simple and independently
+    correct, but rebuilding every candidate history for every target date is
+    cubic in the number of daily rows.  Bulk source backfills have no
+    publication timestamps, so their knowledge boundary is the observation
+    date.  In that case a rolling value cache is exactly equivalent and turns
+    the replay into a quadratic pass.  Revisions with explicit publication
+    timestamps use the original implementation so its per-target boundary is
+    preserved.
+    """
+
+    windows = {**DEFAULT_WINDOW_YEARS, **(window_years or {})}
+    candidate_dates: set[date] = set()
+    for observations in groups.values():
+        for observation in observations:
+            try:
+                candidate_dates.add(_as_date(_field(observation, "observation_date")))
+            except (AttributeError, KeyError, TypeError, ValueError):
+                continue
+
+    ordered_dates = sorted(candidate_dates)
+    target_set = set(target_days)
+    history: dict[str, list[tuple[date, float]]] = {}
+    results: list[DailyScoreResult] = []
+    for day in ordered_dates:
+        visible = {
+            name: _known_by(observations, day) for name, observations in groups.items()
+        }
+        if day in target_set and start <= day <= end:
+            historical_values = {
+                factor_id: [
+                    value
+                    for candidate, value in values
+                    if candidate
+                    >= _replay_years_before(
+                        day, windows.get(factor_id, max(windows.values()))
+                    )
+                ]
+                for factor_id, values in history.items()
+            }
+            results.append(
+                calculate_daily_score(
+                    taiex_observations=visible["taiex"],
+                    pcr_observations=visible["pcr"],
+                    tx_observations=visible["tx"],
+                    vix_observations=visible["vix"],
+                    institutional_observations=visible["institutional"],
+                    cash_observations=visible["cash"],
+                    turnover_observations=visible["turnover"],
+                    target_date=day,
+                    historical_values=historical_values,
+                )
+            )
+            factor_inputs = results[-1].factor_inputs
+        else:
+            factor_inputs = adapt_v01_inputs(
+                taiex_observations=visible["taiex"],
+                pcr_observations=visible["pcr"],
+                tx_observations=visible["tx"],
+                vix_observations=visible["vix"],
+                institutional_observations=visible["institutional"],
+                cash_observations=visible["cash"],
+                turnover_observations=visible["turnover"],
+                target_date=day,
+            )
+        for factor_id, factor_input in factor_inputs.items():
+            if (
+                factor_input.status == FACTOR_AVAILABLE
+                and factor_input.value is not None
+            ):
+                history.setdefault(factor_id, []).append((day, factor_input.value))
+    return results
+
+
 def _latest_taiex_closes(
     observations: Sequence[Any], *, knowledge_date: date | None = None
 ) -> list[tuple[date, float]]:
@@ -381,6 +487,23 @@ def build_score_series(
         for day, _ in _latest_taiex_closes(taiex_observations, knowledge_date=end)
         if start <= day <= end
     ]
+    groups: dict[str, Sequence[Any]] = {
+        "taiex": taiex_observations,
+        "pcr": pcr_observations,
+        "tx": tx_observations,
+        "vix": vix_observations,
+        "institutional": institutional_observations or (),
+        "cash": cash_observations or (),
+        "turnover": turnover_observations or (),
+    }
+    if not _has_publication_timestamps(tuple(groups.values())):
+        return _build_score_series_incremental(
+            groups=groups,
+            target_days=candidate_days,
+            start=start,
+            end=end,
+            window_years=window_years,
+        )
     results: list[DailyScoreResult] = []
     for day in candidate_days:
         # Replay only the versions visible at this date. Missing publication

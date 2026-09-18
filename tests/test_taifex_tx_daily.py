@@ -59,6 +59,22 @@ def test_fetch_daily_posts_requested_date() -> None:
     assert calls == [(TX_DAILY_ENDPOINT, build_daily_form(date(2026, 9, 17)))]
 
 
+def test_fetch_daily_retries_transient_request_failure() -> None:
+    attempts = 0
+
+    def post(url: str, data: dict[str, str]) -> bytes:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise OSError("temporary connection reset")
+        return daily_payload()
+
+    observations = fetch_tx_day(date(2026, 9, 17), http_post=post, retry_delay=0)
+
+    assert len(observations) == 1
+    assert attempts == 2
+
+
 def test_empty_daily_table_is_a_non_trading_day() -> None:
     assert (
         parse_tx_daily_payload(

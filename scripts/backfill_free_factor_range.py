@@ -174,6 +174,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         current_year_start = max(args.start, date(2026, 1, 1))
         if current_year_start <= args.end:
             for target in _dates(current_year_start, args.end):
+                # Weekends never publish a report; skipping them reduces the
+                # number of official-page requests while weekday holidays are
+                # still handled by the parser returning an empty result.
+                if target.weekday() >= 5:
+                    continue
                 tx.extend(fetch_tx_day(target, market_code=0, http_post=post))
                 if args.request_delay:
                     time.sleep(args.request_delay)

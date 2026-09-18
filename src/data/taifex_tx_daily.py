@@ -9,6 +9,7 @@ session and preserves the same observation identity used by the annual parser.
 from __future__ import annotations
 
 import hashlib
+import time
 from collections.abc import Callable, Mapping, Sequence
 from datetime import date, datetime, timezone
 from html.parser import HTMLParser
@@ -123,18 +124,30 @@ def fetch_tx_day(
     market_code: int = 0,
     http_post: Callable[[str, Mapping[str, str]], bytes] | None = None,
     parser_version: str = TX_DAILY_PARSER_VERSION,
+    retries: int = 2,
+    retry_delay: float = 1.0,
 ) -> list[Observation]:
     """Fetch and parse one official date-based TX report."""
 
     if not isinstance(observation_date, date):
         raise TXDailyFetchError("observation_date must be a date")
+    if retries < 0:
+        raise TXDailyFetchError("retries must not be negative")
+    if retry_delay < 0:
+        raise TXDailyFetchError("retry_delay must not be negative")
     form = build_daily_form(observation_date, market_code=market_code)
-    try:
-        payload = (http_post or _http_post)(TX_DAILY_ENDPOINT, form)
-    except Exception as exc:
-        raise TXDailyFetchError(
-            f"TX daily request failed for {observation_date.isoformat()}"
-        ) from exc
+    request = http_post or _http_post
+    for attempt in range(retries + 1):
+        try:
+            payload = request(TX_DAILY_ENDPOINT, form)
+            break
+        except Exception as exc:
+            if attempt >= retries:
+                raise TXDailyFetchError(
+                    f"TX daily request failed for {observation_date.isoformat()}"
+                ) from exc
+            if retry_delay:
+                time.sleep(retry_delay)
     if not isinstance(payload, bytes):
         raise TXDailyFetchError("TX daily request returned a non-bytes payload")
     try:

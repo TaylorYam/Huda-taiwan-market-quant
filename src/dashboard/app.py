@@ -316,6 +316,7 @@ def build_tradingview_kline_html(
       rightPriceScale: {
         borderColor: '#d1d5db',
         autoScale: true,
+        minimumWidth: 120,
         scaleMargins: { top: 0.08, bottom: 0.08 }
       },
       timeScale: {

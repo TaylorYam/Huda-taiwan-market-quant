@@ -464,7 +464,7 @@ def render_history_charts(store: DashboardDataStore) -> None:
         st.warning("無法讀取 TAIEX 歷史，暫不顯示 K 線圖。")
         taiex_rows = []
     ohlc = taiex_ohlc_frame(taiex_rows)
-    st.subheader("台指大盤 K 線 · TradingView 風格")
+    st.subheader("台灣加權指數 · Market Score")
     kline_html = build_tradingview_kline_html(ohlc, score_plot)
     if kline_html is None:
         st.info("目前沒有可繪製的 TAIEX OHLC 資料。")

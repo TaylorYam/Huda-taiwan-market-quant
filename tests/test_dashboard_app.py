@@ -118,7 +118,7 @@ def test_persisted_result_and_metadata(monkeypatch, status, score):
     }
     before = deepcopy(record)
     app, _ = run_app(monkeypatch, record)
-    assert app.metric[0].value == ("72 / 100" if score else "unavailable")
+    assert app.metric[0].value == ("72.0 / 100" if score else "unavailable")
     assert len(app.dataframe[0].value) == 8
     assert "2026-09-17T08:05" in " ".join(t.value for t in app.text)
     assert "2026-09-17T08:00" in " ".join(t.value for t in app.text)
@@ -203,6 +203,11 @@ def test_score_history_does_not_turn_unavailable_into_zero():
     assert frame["狀態"].tolist() == ["available", "unavailable"]
 
 
+def test_display_scores_use_one_decimal_place():
+    assert display_score(72.34, "available") == "72.3 / 100"
+    assert display_score(72, "available") == "72.0 / 100"
+
+
 def test_taiex_ohlc_frame_keeps_only_complete_available_rows():
     frame = taiex_ohlc_frame(
         [
@@ -255,6 +260,23 @@ def test_factor_history_leaves_unavailable_factor_cells_missing():
     )
     assert frame.loc[0, "TAIEX 均線趨勢"] == 75
     assert pd.isna(frame.loc[0, "TAIEX 20 日動能"])
+
+
+def test_factor_history_scores_are_display_rounded_to_one_decimal():
+    frame = factor_history_frame(
+        [
+            {
+                "target_date": "2026-09-17",
+                "factor_scores_json": {
+                    "taiex_20d_momentum": {
+                        "status": "available",
+                        "score": 49.0113,
+                    }
+                },
+            }
+        ]
+    )
+    assert frame.loc[0, "TAIEX 20 日動能"] == 49.0
 
 
 def test_tradingview_kline_html_uses_visible_range_auto_scale_and_zoom():
@@ -337,11 +359,25 @@ def test_dashboard_renders_history_charts_without_recomputing(monkeypatch):
     ]
     app, store = run_app(
         monkeypatch,
+        record={
+            "status": "available",
+            "score": 68,
+            "direction": "偏多",
+            "factor_scores_json": {
+                "taiex_ma20_ma60_trend": {"status": "available", "score": 75}
+            },
+        },
         score_history=score_history,
         taiex_history=taiex_history,
     )
     assert not app.exception
     assert any("歷史趨勢" in header.value for header in app.header)
+    subheaders = [item.value for item in app.subheader]
+    assert (
+        subheaders.index("台灣加權指數 · Market Score")
+        < subheaders.index("分類與因子")
+        < subheaders.index("各因子分數趨勢")
+    )
     assert len(app.tabs) == 8
     assert store.get_market_score_history.call_count == 2
     store.get_observation_history.assert_called_once_with(

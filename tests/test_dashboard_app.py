@@ -11,6 +11,7 @@ from src.dashboard.app import (
     display_score,
     factor_history_frame,
     factor_rows,
+    factor_y_domain,
     score_history_frame,
     taiex_ohlc_frame,
 )
@@ -277,6 +278,18 @@ def test_factor_history_scores_are_display_rounded_to_one_decimal():
         ]
     )
     assert frame.loc[0, "TAIEX 20 日動能"] == 49.0
+
+
+def test_factor_y_domain_follows_values_with_bounded_margin():
+    lower, upper = factor_y_domain(pd.Series([48.0, 52.0]))
+    assert lower == pytest.approx(47.0)
+    assert upper == pytest.approx(53.0)
+
+
+def test_factor_y_domain_handles_constant_and_empty_series():
+    assert factor_y_domain(pd.Series([0.0, 0.0])) == (0.0, 1.0)
+    assert factor_y_domain(pd.Series([100.0, 100.0])) == (99.0, 100.0)
+    assert factor_y_domain(pd.Series(dtype=float)) == (0.0, 100.0)
 
 
 def test_tradingview_kline_html_uses_visible_range_auto_scale_and_zoom():

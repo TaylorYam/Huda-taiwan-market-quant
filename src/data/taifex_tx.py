@@ -106,19 +106,25 @@ def parse_tx_payload(
                 )
             seen_keys.add(key)
             values = {
-                "open": _parse_number(row, indexes["open"], "open", year, row_number),
-                "high": _parse_number(row, indexes["high"], "high", year, row_number),
-                "low": _parse_number(row, indexes["low"], "low", year, row_number),
-                "close": _parse_number(
+                "open": _parse_optional_number(
+                    row, indexes["open"], "open", year, row_number
+                ),
+                "high": _parse_optional_number(
+                    row, indexes["high"], "high", year, row_number
+                ),
+                "low": _parse_optional_number(
+                    row, indexes["low"], "low", year, row_number
+                ),
+                "close": _parse_optional_number(
                     row, indexes["close"], "close", year, row_number
                 ),
-                "settlement": _parse_number(
+                "settlement": _parse_optional_number(
                     row, indexes["settlement"], "settlement", year, row_number
                 ),
-                "volume": _parse_number(
+                "volume": _parse_optional_number(
                     row, indexes["volume"], "volume", year, row_number, integer=True
                 ),
-                "open_interest": _parse_number(
+                "open_interest": _parse_optional_number(
                     row,
                     indexes["open_interest"],
                     "open_interest",
@@ -146,7 +152,14 @@ def parse_tx_payload(
                 source_payload_hash=payload_hash,
                 parser_version=parser_version,
                 values=values,
-                quality_status="available",
+                quality_status="available"
+                if values["close"] is not None
+                else "invalid",
+                quality_notes=(
+                    None
+                    if values["close"] is not None
+                    else "Official TX row has no close price."
+                ),
                 publication_label=f"year:{year:04d}",
             )
         )
@@ -336,6 +349,26 @@ def _parse_number(
             f"{year}: row {row_number} field {field_name} is not an integer"
         )
     return int(number) if integer or number.is_integer() else number
+
+
+def _parse_optional_number(
+    row: Sequence[str],
+    index: int | None,
+    field_name: str,
+    year: int,
+    row_number: int,
+    *,
+    integer: bool = False,
+) -> int | float | None:
+    """Keep an official blank field as null instead of inventing a value."""
+
+    if (
+        index is None
+        or len(row) <= index
+        or row[index].strip() in {"", "-", "--", "N/A"}
+    ):
+        return None
+    return _parse_number(row, index, field_name, year, row_number, integer=integer)
 
 
 def _record_key(expiry: str, session: str) -> str:

@@ -1,0 +1,61 @@
+name: Free factor range backfill
+
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "First date, YYYY-MM-DD"
+        required: true
+        type: string
+      end:
+        description: "Last date, YYYY-MM-DD"
+        required: true
+        type: string
+      write:
+        description: "Persist validated observations to Supabase"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: free-factor-range-backfill
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    name: Backfill TWSE and TAIFEX factor sources
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install HTTP client
+        run: python -m pip install --upgrade requests
+
+      - name: Verify Supabase secrets for write mode
+        if: ${{ inputs.write == true }}
+        shell: bash
+        run: |
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SECRET_KEY:-}" ]; then
+            echo "::error::SUPABASE_URL or SUPABASE_SECRET_KEY is empty or unavailable."
+            exit 1
+          fi
+
+      - name: Backfill validated range
+        shell: bash
+        run: |
+          args=(--start "${{ inputs.start }}" --end "${{ inputs.end }}")
+          if [ "${{ inputs.write }}" != "true" ]; then args+=(--dry-run); fi
+          python -m scripts.backfill_free_factor_range "${args[@]}"

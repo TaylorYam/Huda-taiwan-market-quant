@@ -401,21 +401,22 @@ class SupabaseRestObservationStore:
             )
             pending.append((index, key, payload))
 
-        if pending:
+        for offset in range(0, len(pending), 500):
+            chunk = pending[offset : offset + 500]
             inserted = self._request(
                 "POST",
                 "/observations",
-                json_body=[payload for _, _, payload in pending],
+                json_body=[payload for _, _, payload in chunk],
                 prefer="return=representation",
             )
-            if len(inserted) != len(pending):
+            if len(inserted) != len(chunk):
                 raise RuntimeError(
                     "Supabase did not return every bulk-inserted observation"
                 )
             inserted_by_key = {
                 self._observation_identity_key(row): row for row in inserted
             }
-            for index, key, _ in pending:
+            for index, key, _ in chunk:
                 row = inserted_by_key.get(key)
                 if row is None:
                     raise RuntimeError(

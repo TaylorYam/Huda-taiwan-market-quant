@@ -6,10 +6,10 @@ import json
 import os
 from collections.abc import Mapping
 from datetime import datetime
+from html import escape
 from math import isfinite
 from urllib.parse import urlsplit
 
-import altair as alt
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
@@ -201,21 +201,30 @@ def factor_history_frame(rows: object) -> pd.DataFrame:
     return pd.DataFrame(output, columns=["日期", *FACTOR_LABELS.values()])
 
 
-def factor_y_domain(series: pd.Series) -> tuple[float, float]:
-    """Return readable, data-driven bounds for one factor score chart."""
+def factor_table_markup(record: Mapping[str, object] | None) -> str:
+    """Render the persisted factor table inside the linked chart component."""
 
-    values = pd.to_numeric(series, errors="coerce").dropna()
-    if values.empty:
-        return 0.0, 100.0
-    minimum = float(values.min())
-    maximum = float(values.max())
-    margin = max((maximum - minimum) * 0.08, 1.0)
-    lower = max(0.0, minimum - margin)
-    upper = min(100.0, maximum + margin)
-    if lower == upper:
-        lower = max(0.0, minimum - 1.0)
-        upper = min(100.0, maximum + 1.0)
-    return lower, upper
+    if record is None:
+        return ""
+    rows = factor_rows(record)
+    headers = ("分類", "因子", "狀態", "分數", "原因")
+    header_markup = "".join(f"<th>{escape(header)}</th>" for header in headers)
+    body_markup_rows = []
+    for row in rows:
+        cells = []
+        for header in headers:
+            value = row.get(header)
+            cells.append(f"<td>{escape(str(value if value is not None else '—'))}</td>")
+        body_markup_rows.append("<tr>" + "".join(cells) + "</tr>")
+    body_markup = "".join(body_markup_rows)
+    return (
+        '<section class="factor-table" aria-label="分類與因子">'
+        "<h2>分類與因子</h2>"
+        f'<div class="table-scroll"><table><thead><tr>{header_markup}</tr></thead>'
+        f"<tbody>{body_markup}</tbody></table></div>"
+        '<p class="table-note">顯示已儲存的因子分數；目前持久化格式未包含原始值或分類總分，本頁不重新計算。</p>'
+        "</section>"
+    )
 
 
 TRADINGVIEW_LIBRARY_URL = (
@@ -225,13 +234,15 @@ TRADINGVIEW_LIBRARY_URL = (
 
 
 def build_tradingview_kline_html(
-    ohlc: pd.DataFrame, score_plot: pd.DataFrame | None = None
+    ohlc: pd.DataFrame,
+    score_plot: pd.DataFrame | None = None,
+    factor_plot: pd.DataFrame | None = None,
+    factor_table: Mapping[str, object] | None = None,
 ) -> str | None:
-    """Build linked TradingView Lightweight Charts price and score panes.
+    """Build one linked Lightweight Charts component for all history panes.
 
-    The library's price scale is deliberately left in auto-scale mode. That
-    makes the right axis follow the highest and lowest candles in the current
-    visible range whenever the user zooms or drags horizontally.
+    The price, Market Score, and selected factor panes share their visible date
+    range and crosshair. Every pane keeps its own auto-scaled right axis.
     """
 
     if ohlc.empty:
@@ -259,10 +270,41 @@ def build_tradingview_kline_html(
                 score_rows.append({"time": date, "value": score})
     payload = json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
     score_payload = json.dumps(score_rows, ensure_ascii=False, separators=(",", ":"))
+    factor_rows_payload: dict[str, list[dict[str, object]]] = {}
+    if factor_plot is not None and not factor_plot.empty:
+        factor_columns = [column for column in factor_plot.columns if column != "日期"]
+        for factor_label in factor_columns:
+            factor_rows_for_chart = []
+            has_value = False
+            for row in factor_plot.to_dict("records"):
+                date = row.get("日期")
+                if not isinstance(date, str) or not date:
+                    continue
+                value = _finite_number(row.get(factor_label), minimum=0, maximum=100)
+                point: dict[str, object] = {"time": date}
+                if value is not None:
+                    point["value"] = round(value, 1)
+                    has_value = True
+                factor_rows_for_chart.append(point)
+            if has_value:
+                factor_rows_payload[factor_label] = factor_rows_for_chart
+    factor_payload = json.dumps(
+        factor_rows_payload, ensure_ascii=False, separators=(",", ":")
+    )
+    factor_table_html = factor_table_markup(factor_table)
     score_markup = (
         """<div class="score-title">Market Score（副圖）</div>
     <div id="score-chart" class="pane" aria-label="Market Score 趨勢圖"></div>"""
         if score_rows
+        else ""
+    )
+    factor_markup = (
+        """<section class="factor-panel" aria-label="各因子分數趨勢">
+      <div class="factor-title">各因子分數趨勢</div>
+      <div id="factor-tabs" class="factor-tabs" role="tablist"></div>
+      <div id="factor-chart" class="pane" aria-label="選定因子趨勢圖"></div>
+    </section>"""
+        if factor_rows_payload
         else ""
     )
     return (
@@ -275,7 +317,7 @@ def build_tradingview_kline_html(
     :root { color-scheme: light; }
     html, body { margin: 0; padding: 0; background: #ffffff; }
     body { overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    .shell { width: 100%; height: 640px; display: flex; flex-direction: column; background: #ffffff; }
+    .shell { width: 100%; height: 980px; display: flex; flex-direction: column; background: #ffffff; }
     .legend { height: 42px; padding: 8px 14px 0; box-sizing: border-box; color: #1f2937; font-size: 13px; line-height: 20px; }
     .title { font-weight: 700; letter-spacing: .01em; }
     .values { color: #4b5563; margin-left: 12px; }
@@ -283,9 +325,23 @@ def build_tradingview_kline_html(
     .values .positive { color: #0f9f91; }
     .values .negative { color: #e05252; }
     .pane { width: 100%; min-height: 0; }
-    #price-chart { flex: 1 1 auto; min-height: 430px; }
+    #price-chart { flex: 0 0 360px; min-height: 300px; }
     .score-title { height: 26px; padding: 5px 14px 0; box-sizing: border-box; color: #4b5563; font-size: 12px; border-top: 1px solid #e5e7eb; }
-    #score-chart { flex: 0 0 150px; }
+    #score-chart { flex: 0 0 135px; }
+    .factor-table { flex: 0 0 235px; min-height: 0; padding: 10px 14px 8px; border-top: 1px solid #e5e7eb; box-sizing: border-box; }
+    .factor-table h2 { margin: 0 0 6px; color: #1f2937; font-size: 16px; line-height: 22px; }
+    .table-scroll { max-height: 188px; overflow: auto; border: 1px solid #e5e7eb; border-radius: 8px; }
+    .factor-table table { width: 100%; border-collapse: collapse; color: #374151; font-size: 12px; }
+    .factor-table th, .factor-table td { padding: 5px 8px; text-align: left; border-bottom: 1px solid #eef1f4; white-space: nowrap; }
+    .factor-table th { position: sticky; top: 0; background: #f8fafc; color: #6b7280; font-weight: 600; }
+    .factor-table tr:last-child td { border-bottom: 0; }
+    .table-note { margin: 5px 0 0; color: #9ca3af; font-size: 11px; }
+    .factor-panel { flex: 1 1 auto; min-height: 200px; display: flex; flex-direction: column; border-top: 1px solid #e5e7eb; }
+    .factor-title { height: 26px; padding: 5px 14px 0; box-sizing: border-box; color: #4b5563; font-size: 12px; }
+    .factor-tabs { display: flex; gap: 4px; height: 36px; padding: 2px 14px 5px; box-sizing: border-box; overflow-x: auto; }
+    .factor-tab { flex: 0 0 auto; border: 1px solid #d1d5db; border-radius: 5px; background: #ffffff; color: #4b5563; padding: 3px 9px; font: inherit; font-size: 12px; cursor: pointer; }
+    .factor-tab[aria-selected="true"] { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; font-weight: 600; }
+    #factor-chart { flex: 1 1 auto; min-height: 138px; }
   </style>
 </head>
 <body>
@@ -297,6 +353,8 @@ def build_tradingview_kline_html(
     <div id="price-chart" class="pane" aria-label="台指大盤日 K 線圖"></div>
     """
         + score_markup
+        + factor_table_html
+        + factor_markup
         + """
   </div>
   <script src="""
@@ -308,6 +366,9 @@ def build_tradingview_kline_html(
         + """;
     const scoreData = """
         + score_payload
+        + """;
+    const factorData = """
+        + factor_payload
         + """;
     const scoreByTime = new Map(scoreData.map((point) => [point.time, point.value]));
     const alignedScoreByTime = new Map();
@@ -322,6 +383,8 @@ def build_tradingview_kline_html(
     const priceElement = document.getElementById('price-chart');
     const valuesElement = document.getElementById('values');
     const scoreElement = document.getElementById('score-chart');
+    const factorTabsElement = document.getElementById('factor-tabs');
+    const factorElement = document.getElementById('factor-chart');
     const interactionOptions = {
       crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
       handleScroll: {
@@ -419,6 +482,54 @@ def build_tradingview_kline_html(
       });
       charts.push(scoreChart);
     }
+    let factorChart = null;
+    let factorSeries = null;
+    let selectedFactorByTime = new Map();
+    const factorLabels = Object.keys(factorData);
+    const updateFactorButtons = (selectedLabel) => {
+      if (!factorTabsElement) return;
+      factorTabsElement.querySelectorAll('button').forEach((button) => {
+        button.setAttribute('aria-selected', button.dataset.factor === selectedLabel ? 'true' : 'false');
+      });
+    };
+    const selectFactor = (factorLabel) => {
+      if (!factorChart || !factorSeries) return;
+      const rows = factorData[factorLabel] || [];
+      const visibleRange = factorChart.timeScale().getVisibleRange();
+      factorSeries.setData(rows);
+      selectedFactorByTime = new Map(
+        rows
+          .filter((point) => point.value !== undefined)
+          .map((point) => [point.time, point.value])
+      );
+      factorChart.priceScale('right').applyOptions({ autoScale: true });
+      if (visibleRange) factorChart.timeScale().setVisibleRange(visibleRange);
+      updateFactorButtons(factorLabel);
+    };
+    if (factorElement && factorLabels.length) {
+      factorChart = LightweightCharts.createChart(factorElement, chartOptions(true));
+      factorSeries = factorChart.addLineSeries({
+        color: '#2563eb',
+        lineWidth: 2,
+        priceLineVisible: false,
+        lastValueVisible: true,
+        crosshairMarkerVisible: true,
+        priceFormat: { type: 'price', precision: 1, minMove: 0.1 }
+      });
+      factorLabels.forEach((factorLabel) => {
+        const button = document.createElement('button');
+        button.className = 'factor-tab';
+        button.type = 'button';
+        button.dataset.factor = factorLabel;
+        button.setAttribute('role', 'tab');
+        button.setAttribute('aria-selected', 'false');
+        button.textContent = factorLabel;
+        button.addEventListener('click', () => selectFactor(factorLabel));
+        factorTabsElement.appendChild(button);
+      });
+      selectFactor(factorLabels[0]);
+      charts.push(factorChart);
+    }
     let syncingRange = false;
     charts.forEach((source) => {
       source.timeScale().subscribeVisibleLogicalRangeChange(() => {
@@ -439,36 +550,45 @@ def build_tradingview_kline_html(
       }
       return null;
     };
-    let syncingCrosshair = false;
-    if (scoreChart && scoreSeries) {
-      priceChart.subscribeCrosshairMove((param) => {
-        if (syncingCrosshair) return;
-        syncingCrosshair = true;
-        const key = timeKey(param.time);
-        const score = alignedScoreByTime.get(key);
-        if (score !== undefined) {
-          scoreChart.setCrosshairPosition(score, param.time, scoreSeries);
-          const candle = candleByTime.get(key);
-          if (candle) renderValues(candle);
-        } else {
-          scoreChart.clearCrosshairPosition();
-        }
+    const clearCrosshairs = () => {
+      priceChart.clearCrosshairPosition();
+      if (scoreChart) scoreChart.clearCrosshairPosition();
+      if (factorChart) factorChart.clearCrosshairPosition();
+    };
+    const syncCrosshair = (param) => {
+      if (syncingCrosshair) return;
+      syncingCrosshair = true;
+      const key = timeKey(param.time);
+      if (!key) {
+        clearCrosshairs();
+        renderValues(latest);
         syncingCrosshair = false;
-      });
-      scoreChart.subscribeCrosshairMove((param) => {
-        if (syncingCrosshair) return;
-        syncingCrosshair = true;
-        const key = timeKey(param.time);
-        const candle = candleByTime.get(key);
-        if (candle) {
-          priceChart.setCrosshairPosition(candle.close, param.time, candles);
-          renderValues(candle);
-        } else {
-          priceChart.clearCrosshairPosition();
-        }
-        syncingCrosshair = false;
-      });
-    }
+        return;
+      }
+      const candle = candleByTime.get(key);
+      const score = alignedScoreByTime.get(key);
+      const factor = selectedFactorByTime.get(key);
+      if (candle) {
+        priceChart.setCrosshairPosition(candle.close, param.time, candles);
+        renderValues(candle);
+      } else {
+        priceChart.clearCrosshairPosition();
+      }
+      if (scoreChart && scoreSeries && score !== undefined) {
+        scoreChart.setCrosshairPosition(score, param.time, scoreSeries);
+      } else if (scoreChart) {
+        scoreChart.clearCrosshairPosition();
+      }
+      if (factorChart && factorSeries && factor !== undefined) {
+        factorChart.setCrosshairPosition(factor, param.time, factorSeries);
+      } else if (factorChart) {
+        factorChart.clearCrosshairPosition();
+      }
+      syncingCrosshair = false;
+    };
+    priceChart.subscribeCrosshairMove(syncCrosshair);
+    if (scoreChart) scoreChart.subscribeCrosshairMove(syncCrosshair);
+    if (factorChart) factorChart.subscribeCrosshairMove(syncCrosshair);
     const start = Math.max(0, candleData.length - 180);
     const initialRange = { from: start, to: candleData.length + 8 };
     priceChart.timeScale().setVisibleLogicalRange(initialRange);
@@ -476,20 +596,13 @@ def build_tradingview_kline_html(
     if (scoreChart && initialVisibleRange) {
       scoreChart.timeScale().setVisibleRange(initialVisibleRange);
     }
+    if (factorChart && initialVisibleRange) {
+      factorChart.timeScale().setVisibleRange(initialVisibleRange);
+    }
   </script>
 </body>
 </html>
 """
-    )
-
-
-def render_factor_table(record: dict | None) -> None:
-    if record is None:
-        return
-    st.subheader("分類與因子")
-    st.dataframe(factor_rows(record), hide_index=True, width="stretch")
-    st.caption(
-        "顯示已儲存的因子分數；目前持久化格式未包含原始值或分類總分，本頁不重新計算。"
     )
 
 
@@ -513,14 +626,32 @@ def render_history_charts(
         st.warning("無法讀取 TAIEX 歷史，暫不顯示 K 線圖。")
         taiex_rows = []
     ohlc = taiex_ohlc_frame(taiex_rows)
+
+    try:
+        factor_rows_history = store.get_market_score_history(limit=CHART_LIMIT)
+    except READ_ERRORS:
+        factor_rows_history = []
+    factor_frame = factor_history_frame(factor_rows_history)
+    factor_columns = [column for column in factor_frame.columns if column != "日期"]
+    factor_plot = (
+        factor_frame.dropna(subset=factor_columns, how="all")
+        if factor_columns
+        else pd.DataFrame()
+    )
+
     st.subheader("台灣加權指數 · Market Score")
-    kline_html = build_tradingview_kline_html(ohlc, score_plot)
+    kline_html = build_tradingview_kline_html(
+        ohlc,
+        score_plot,
+        factor_plot,
+        latest_score,
+    )
     if kline_html is None:
         st.info("目前沒有可繪製的 TAIEX OHLC 資料。")
     else:
-        components.html(kline_html, height=640, scrolling=False)
+        components.html(kline_html, height=980, scrolling=False)
         st.caption(
-            "操作：滑鼠滾輪縮放時間範圍；按住滑鼠左鍵左右拖曳平移；K 線與 Market Score 會同步定位，右側價格軸依目前可見 K 線自動調整。"
+            "操作：滑鼠滾輪縮放時間範圍；按住滑鼠左鍵左右拖曳平移；K 線、Market Score 與選定因子會同步定位，各副圖 Y 軸依目前可見資料自動調整。"
         )
     if score_plot.empty:
         st.info(
@@ -532,69 +663,10 @@ def render_history_charts(
         st.info("目前沒有完整的 TAIEX OHLC 資料可繪圖。")
     if len(ohlc) < len(_latest_rows_by_date(_as_rows(taiex_rows))):
         st.caption("部分日期缺少完整 OHLC 或品質不可用，已從 K 線排除。")
-
-    render_factor_table(latest_score)
-
-    try:
-        factor_rows_history = store.get_market_score_history(limit=CHART_LIMIT)
-    except READ_ERRORS:
-        factor_rows_history = []
-    factor_frame = factor_history_frame(factor_rows_history)
-    st.subheader("各因子分數趨勢")
-    factor_columns = [column for column in factor_frame.columns if column != "日期"]
-    factor_plot = (
-        factor_frame.dropna(subset=factor_columns, how="all")
-        if factor_columns
-        else pd.DataFrame()
-    )
     if factor_plot.empty:
         st.info("目前沒有可繪製的 available 因子分數；缺值不會被當成 0。")
-    else:
-        factor_tabs = st.tabs(factor_columns)
-        indexed_factor_plot = factor_plot.set_index("日期")
-        for factor_id, factor_label, factor_tab in zip(
-            FACTOR_LABELS, factor_columns, factor_tabs, strict=True
-        ):
-            with factor_tab:
-                factor_series = indexed_factor_plot[factor_label]
-                available = factor_series.dropna()
-                category = FACTOR_CATEGORIES.get(factor_id, "其他")
-                st.caption(f"{category} · {len(available)} 筆 available")
-                if available.empty:
-                    st.info("目前沒有可繪製的 available 分數；缺值不會被當成 0。")
-                else:
-                    chart_data = (
-                        factor_series.rename("因子分數")
-                        .rename_axis("日期")
-                        .reset_index()
-                    )
-                    chart_data["日期"] = pd.to_datetime(
-                        chart_data["日期"], errors="coerce"
-                    )
-                    chart_data = chart_data.dropna(subset=["日期"])
-                    y_min, y_max = factor_y_domain(available)
-                    factor_chart = (
-                        alt.Chart(chart_data)
-                        .mark_line(color="#2563eb", strokeWidth=2)
-                        .encode(
-                            x=alt.X("日期:T", title="日期"),
-                            y=alt.Y(
-                                "因子分數:Q",
-                                title="因子分數",
-                                scale=alt.Scale(domain=[y_min, y_max], nice=False),
-                            ),
-                            tooltip=[
-                                alt.Tooltip("日期:T", title="日期"),
-                                alt.Tooltip(
-                                    "因子分數:Q",
-                                    title=factor_label,
-                                    format=".1f",
-                                ),
-                            ],
-                        )
-                        .properties(height=300)
-                    )
-                    st.altair_chart(factor_chart, use_container_width=True)
+    elif factor_columns:
+        st.caption("因子分頁已整合至上方圖表；切換因子後會保留日期範圍並同步十字游標。")
 
 
 def render_score(record: dict | None) -> None:

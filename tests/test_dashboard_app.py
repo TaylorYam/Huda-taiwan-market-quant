@@ -11,7 +11,6 @@ from src.dashboard.app import (
     display_score,
     factor_history_frame,
     factor_rows,
-    factor_y_domain,
     score_history_frame,
     taiex_ohlc_frame,
 )
@@ -120,7 +119,7 @@ def test_persisted_result_and_metadata(monkeypatch, status, score):
     before = deepcopy(record)
     app, _ = run_app(monkeypatch, record)
     assert app.metric[0].value == ("72.0 / 100" if score else "unavailable")
-    assert len(app.dataframe[0].value) == 8
+    assert len(app.dataframe[0].value) == len(SOURCE_DATASETS)
     assert "2026-09-17T08:05" in " ".join(t.value for t in app.text)
     assert "2026-09-17T08:00" in " ".join(t.value for t in app.text)
     assert record == before
@@ -280,18 +279,6 @@ def test_factor_history_scores_are_display_rounded_to_one_decimal():
     assert frame.loc[0, "TAIEX 20 日動能"] == 49.0
 
 
-def test_factor_y_domain_follows_values_with_bounded_margin():
-    lower, upper = factor_y_domain(pd.Series([48.0, 52.0]))
-    assert lower == pytest.approx(47.0)
-    assert upper == pytest.approx(53.0)
-
-
-def test_factor_y_domain_handles_constant_and_empty_series():
-    assert factor_y_domain(pd.Series([0.0, 0.0])) == (0.0, 1.0)
-    assert factor_y_domain(pd.Series([100.0, 100.0])) == (99.0, 100.0)
-    assert factor_y_domain(pd.Series(dtype=float)) == (0.0, 100.0)
-
-
 def test_tradingview_kline_html_uses_visible_range_auto_scale_and_zoom():
     html = build_tradingview_kline_html(
         pd.DataFrame(
@@ -346,6 +333,41 @@ def test_tradingview_kline_html_links_market_score_pane():
     assert "scoreByTime" in html
 
 
+def test_tradingview_kline_html_links_selected_factor_pane():
+    html = build_tradingview_kline_html(
+        pd.DataFrame(
+            [
+                {
+                    "日期": "2026-09-16",
+                    "open": 1,
+                    "high": 3,
+                    "low": 0.5,
+                    "close": 2,
+                },
+            ]
+        ),
+        pd.DataFrame([{"日期": "2026-09-16", "Market Score": 68}]),
+        pd.DataFrame([{"日期": "2026-09-16", "TAIEX 均線趨勢": 75}]),
+        {
+            "factor_scores_json": {
+                "taiex_ma20_ma60_trend": {
+                    "status": "available",
+                    "score": 75,
+                }
+            }
+        },
+    )
+    assert html is not None
+    assert 'id="factor-tabs"' in html
+    assert 'id="factor-chart"' in html
+    assert 'aria-label="分類與因子"' in html
+    assert "const factorData" in html
+    assert "factorSeries.setData(rows)" in html
+    assert "selectedFactorByTime" in html
+    assert "factorChart.priceScale('right').applyOptions({ autoScale: true })" in html
+    assert "clearCrosshairs" in html
+
+
 def test_dashboard_renders_history_charts_without_recomputing(monkeypatch):
     score_history = [
         {
@@ -386,12 +408,8 @@ def test_dashboard_renders_history_charts_without_recomputing(monkeypatch):
     assert not app.exception
     assert any("歷史趨勢" in header.value for header in app.header)
     subheaders = [item.value for item in app.subheader]
-    assert (
-        subheaders.index("台灣加權指數 · Market Score")
-        < subheaders.index("分類與因子")
-        < subheaders.index("各因子分數趨勢")
-    )
-    assert len(app.tabs) == 8
+    assert "台灣加權指數 · Market Score" in subheaders
+    assert len(app.tabs) == 0
     assert store.get_market_score_history.call_count == 2
     store.get_observation_history.assert_called_once_with(
         "twse_taiex_daily_v1", limit=1000

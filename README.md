@@ -190,9 +190,10 @@ python -m streamlit run streamlit_app.py
   這是來源更新概況，並非分數的 as-of 證據或全部資料品質摘要；
   未持久化的失敗擷取無法由此得知。外資現貨分子與市場成交金額分母分開列示，
   正式資料完整性與歷史窗口仍須驗收。
-- 歷史趨勢區提供 Market Score 趨勢、TAIEX OHLC K 線，以及各因子分數趨勢；
-  圖表只使用已持久化且狀態為 available 的數值，缺值會顯示為 unavailable，
-  不會補零或在展示層重新計算。
+- 歷史趨勢區提供 TradingView 風格的 TAIEX OHLC 日 K 線、獨立的 Market Score
+  趨勢與各因子分數趨勢。K 線使用右側價格軸、十字游標、左右拖曳與滾輪縮放；
+  價格軸會依目前可見 K 線自動調整上下界。圖表只使用已持久化且狀態為 available
+  的數值，缺值會顯示為 unavailable，不會補零或在展示層重新計算。
 - 頁面載入或按「重新整理」時讀取最新資料，無跨使用者的憑證快取。
   `available` 不是新鮮度保證，請核對 target、as-of 與各來源日期。
 

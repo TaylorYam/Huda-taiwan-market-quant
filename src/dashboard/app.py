@@ -9,6 +9,7 @@ from datetime import datetime
 from math import isfinite
 from urllib.parse import urlsplit
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
@@ -198,6 +199,23 @@ def factor_history_frame(rows: object) -> pd.DataFrame:
                 item[label] = None
         output.append(item)
     return pd.DataFrame(output, columns=["日期", *FACTOR_LABELS.values()])
+
+
+def factor_y_domain(series: pd.Series) -> tuple[float, float]:
+    """Return readable, data-driven bounds for one factor score chart."""
+
+    values = pd.to_numeric(series, errors="coerce").dropna()
+    if values.empty:
+        return 0.0, 100.0
+    minimum = float(values.min())
+    maximum = float(values.max())
+    margin = max((maximum - minimum) * 0.08, 1.0)
+    lower = max(0.0, minimum - margin)
+    upper = min(100.0, maximum + margin)
+    if lower == upper:
+        lower = max(0.0, minimum - 1.0)
+        upper = min(100.0, maximum + 1.0)
+    return lower, upper
 
 
 TRADINGVIEW_LIBRARY_URL = (
@@ -545,11 +563,38 @@ def render_history_charts(
                 if available.empty:
                     st.info("目前沒有可繪製的 available 分數；缺值不會被當成 0。")
                 else:
-                    st.line_chart(
-                        factor_series,
-                        y_label="因子分數",
-                        height=300,
+                    chart_data = (
+                        factor_series.rename("因子分數")
+                        .rename_axis("日期")
+                        .reset_index()
                     )
+                    chart_data["日期"] = pd.to_datetime(
+                        chart_data["日期"], errors="coerce"
+                    )
+                    chart_data = chart_data.dropna(subset=["日期"])
+                    y_min, y_max = factor_y_domain(available)
+                    factor_chart = (
+                        alt.Chart(chart_data)
+                        .mark_line(color="#2563eb", strokeWidth=2)
+                        .encode(
+                            x=alt.X("日期:T", title="日期"),
+                            y=alt.Y(
+                                "因子分數:Q",
+                                title="因子分數",
+                                scale=alt.Scale(domain=[y_min, y_max], nice=False),
+                            ),
+                            tooltip=[
+                                alt.Tooltip("日期:T", title="日期"),
+                                alt.Tooltip(
+                                    "因子分數:Q",
+                                    title=factor_label,
+                                    format=".1f",
+                                ),
+                            ],
+                        )
+                        .properties(height=300)
+                    )
+                    st.altair_chart(factor_chart, use_container_width=True)
 
 
 def render_score(record: dict | None) -> None:

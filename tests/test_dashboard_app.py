@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from src.dashboard.app import display_score, factor_rows
+from src.dashboard.app import SOURCE_DATASETS, display_score, factor_rows
 
 
 @pytest.fixture(autouse=True)
@@ -23,14 +23,14 @@ def run_app(monkeypatch, record=None, error=None, source=None):
     if error:
         store.get_latest_market_score.side_effect = error
     with patch("src.dashboard.app.DashboardDataStore", return_value=store):
-        app = AppTest.from_file("streamlit_app.py").run()
+        app = AppTest.from_file("streamlit_app.py", default_timeout=30).run()
     assert not app.exception
     return app, store
 
 
 def test_missing_credentials_do_not_connect():
     with patch("src.dashboard.app.DashboardDataStore") as factory:
-        app = AppTest.from_file("streamlit_app.py").run()
+        app = AppTest.from_file("streamlit_app.py", default_timeout=30).run()
     assert not app.exception
     assert "尚未設定" in app.error[0].value
     factory.assert_not_called()
@@ -39,9 +39,9 @@ def test_missing_credentials_do_not_connect():
 def test_empty_score_still_displays_source_quality(monkeypatch):
     app, store = run_app(monkeypatch)
     assert "empty" in app.info[0].value
-    assert len(app.dataframe[0].value) == 5
+    assert len(app.dataframe[0].value) == 7
     assert set(app.dataframe[0].value["品質狀態"]) == {"empty"}
-    assert store.get_latest_source_quality.call_count == 5
+    assert store.get_latest_source_quality.call_count == 7
 
 
 def test_source_failure_state_and_timestamp_are_displayed(monkeypatch):
@@ -65,6 +65,7 @@ def test_source_failure_state_and_timestamp_are_displayed(monkeypatch):
     [
         "http://example.supabase.co",
         "https://[bad",
+        "https://example.supabase.co:not-a-port",
         "https://user:pass@example.supabase.co",
     ],
 )
@@ -72,7 +73,7 @@ def test_invalid_url_is_rejected_without_connection(monkeypatch, url):
     monkeypatch.setenv("SUPABASE_URL", url)
     monkeypatch.setenv("SUPABASE_SECRET_KEY", "sb_secret_never_render_this")
     with patch("src.dashboard.app.DashboardDataStore") as factory:
-        app = AppTest.from_file("streamlit_app.py").run()
+        app = AppTest.from_file("streamlit_app.py", default_timeout=30).run()
     assert not app.exception
     assert "設定錯誤" in app.error[0].value
     factory.assert_not_called()
@@ -120,7 +121,7 @@ def test_connection_error_is_sanitized(monkeypatch):
         "src.dashboard.app.DashboardDataStore",
         side_effect=RuntimeError("sb_secret_never_render_this"),
     ):
-        app = AppTest.from_file("streamlit_app.py").run()
+        app = AppTest.from_file("streamlit_app.py", default_timeout=30).run()
     assert not app.exception
     assert "資料連線失敗" in app.error[0].value
     assert "sb_secret_never_render_this" not in str(app)
@@ -143,3 +144,47 @@ def test_absent_factors_are_explicitly_unavailable():
     rows = factor_rows({"factor_scores_json": {}})
     assert len(rows) == 8
     assert all(row["分數"] == "unavailable" for row in rows)
+
+
+def test_malformed_factor_payload_is_visible_as_unavailable():
+    rows = factor_rows(
+        {
+            "factor_scores_json": {
+                "taiex_ma20_ma60_trend": ["unexpected", "payload"],
+            }
+        }
+    )
+    row = next(row for row in rows if row["因子"] == "TAIEX 均線趨勢")
+    assert row["狀態"] == "unavailable"
+    assert row["分數"] == "unavailable"
+    assert row["原因"] == "資料格式錯誤"
+
+
+def test_malformed_source_timestamp_does_not_hide_quality_table(monkeypatch):
+    app, _ = run_app(
+        monkeypatch,
+        source={
+            "observation_date": "2026-09-17",
+            "quality_status": "available",
+            "last_retrieved_at": "not-a-timestamp",
+        },
+    )
+    assert len(app.dataframe) == 1
+    assert app.dataframe[0].value.iloc[0]["最後擷取時間"] == "格式錯誤"
+
+
+def test_source_api_error_keeps_other_source_rows_visible(monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "sb_secret_never_render_this")
+    store = MagicMock()
+    store.__enter__.return_value = store
+    store.get_latest_market_score.return_value = None
+    store.get_latest_source_quality.side_effect = iter(
+        [RuntimeError("private detail")] + [None] * (len(SOURCE_DATASETS) - 1)
+    )
+    with patch("src.dashboard.app.DashboardDataStore", return_value=store):
+        app = AppTest.from_file("streamlit_app.py", default_timeout=30).run()
+    assert not app.exception
+    assert len(app.dataframe) == 1
+    assert "無法讀取" in app.warning[0].value
+    assert "private detail" not in str(app)

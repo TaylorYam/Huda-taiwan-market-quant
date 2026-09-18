@@ -118,6 +118,50 @@ def test_empty_sources_still_persist_unavailable():
     assert len(api.scores) == 1
 
 
+def test_non_available_quality_rows_are_not_counted_or_used(observations):
+    observations[-1] = replace(observations[-1], quality_status="source_empty")
+    result = run(MemoryApi(observations))
+
+    assert result["observation_count"] == 59
+    assert result["factor_scores"]["taiex_ma20_ma60_trend"]["status"] == "unavailable"
+
+
+def test_target_date_requires_canonical_yyyy_mm_dd():
+    with pytest.raises(ValueError, match="YYYY-MM-DD"):
+        run_daily_score(
+            MemoryApi([]),
+            MemoryApi([]),
+            target_date="20260917",
+            as_of="2026-09-17T20:00:00+08:00",
+        )
+
+
+def test_main_rejects_future_target_before_connecting(monkeypatch, capsys):
+    called = False
+
+    def fail_if_connected(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError("invalid run window must be rejected before I/O")
+
+    monkeypatch.setattr(
+        "src.scoring.daily_runner.SupabaseRestObservationStore", fail_if_connected
+    )
+    assert (
+        main(
+            [
+                "--target-date",
+                "2026-09-18",
+                "--as-of",
+                "2026-09-17T20:00:00+08:00",
+            ]
+        )
+        == 1
+    )
+    assert called is False
+    assert "failed" in capsys.readouterr().err
+
+
 @pytest.mark.parametrize("boundary", ["2026-09-17", "bad", "2026-09-16T12:00:00Z"])
 def test_invalid_boundary_writes_nothing(boundary):
     api = MemoryApi([])

@@ -3,9 +3,10 @@
 Builds each factor's ``historical_values`` sample by replaying the same
 point-in-time factor adapters used for the target date, once per candidate
 date inside that factor's comparison window. Reusing the adapters means a
-historical point is excluded by the exact same as-of and warm-up rules that
-would apply if that date were itself being scored today, so this cannot
-introduce a lookahead violation the adapters do not already guard against.
+historical point is excluded by the same as-of and warm-up rules that would
+apply if that date were itself being scored today. The shared observation
+envelope is filtered first, so retrieval and ingestion that happened after the
+selected knowledge boundary cannot introduce lookahead.
 """
 
 from __future__ import annotations
@@ -80,6 +81,56 @@ def build_historical_values(
 
     target = _as_date(target_date)
     windows = {**DEFAULT_WINDOW_YEARS, **(window_years or {})}
+    if any(
+        isinstance(years, bool) or not isinstance(years, int) or years < 1
+        for years in windows.values()
+    ):
+        raise ValueError("window_years values must be positive integers")
+
+    # The daily runner already applies this filter after the Supabase read.
+    # Keep the invariant here as well because this function is also a public
+    # replay boundary and callers may pass observations loaded elsewhere.
+    as_of_timestamp = _as_of_timestamp(as_of)
+    as_of_date = _as_date(as_of) if as_of is not None else None
+    taiex_observations = _known_observations(
+        taiex_observations, as_of_date=as_of_date, as_of_timestamp=as_of_timestamp
+    )
+    pcr_observations = _known_observations(
+        pcr_observations, as_of_date=as_of_date, as_of_timestamp=as_of_timestamp
+    )
+    tx_observations = _known_observations(
+        tx_observations, as_of_date=as_of_date, as_of_timestamp=as_of_timestamp
+    )
+    vix_observations = _known_observations(
+        vix_observations, as_of_date=as_of_date, as_of_timestamp=as_of_timestamp
+    )
+    institutional_observations = (
+        _known_observations(
+            institutional_observations,
+            as_of_date=as_of_date,
+            as_of_timestamp=as_of_timestamp,
+        )
+        if institutional_observations is not None
+        else None
+    )
+    cash_observations = (
+        _known_observations(
+            cash_observations,
+            as_of_date=as_of_date,
+            as_of_timestamp=as_of_timestamp,
+        )
+        if cash_observations is not None
+        else None
+    )
+    turnover_observations = (
+        _known_observations(
+            turnover_observations,
+            as_of_date=as_of_date,
+            as_of_timestamp=as_of_timestamp,
+        )
+        if turnover_observations is not None
+        else None
+    )
     earliest_start = _years_before(target, max(windows.values()))
 
     candidate_dates = sorted(
@@ -181,7 +232,93 @@ def _as_date(value: date | datetime | str) -> date:
         return value.date()
     if isinstance(value, date):
         return value
-    return date.fromisoformat(value)
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).date()
+
+
+def _as_of_timestamp(value: date | datetime | str | None) -> datetime | None:
+    """Parse an optional knowledge-boundary timestamp.
+
+    A date has no time-of-day boundary and is handled by ``_as_date``. A
+    timestamp must carry an offset so a replay cannot silently depend on the
+    host machine's local timezone.
+    """
+
+    if value is None or isinstance(value, date) and not isinstance(value, datetime):
+        return None
+    if isinstance(value, str):
+        try:
+            date.fromisoformat(value)
+        except ValueError:
+            pass
+        else:
+            return None
+    parsed = (
+        value
+        if isinstance(value, datetime)
+        else datetime.fromisoformat(value.replace("Z", "+00:00"))
+    )
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError("as_of must include a timezone")
+    return parsed
+
+
+def _known_observations(
+    observations: Sequence[Any],
+    *,
+    as_of_date: date | None,
+    as_of_timestamp: datetime | None,
+) -> tuple[Any, ...]:
+    """Retain rows whose complete evidence envelope was known at ``as_of``."""
+
+    if as_of_date is None and as_of_timestamp is None:
+        return tuple(observations)
+
+    known: list[Any] = []
+    for observation in observations:
+        try:
+            observation_date = _observation_date(observation)
+            if as_of_date is not None and observation_date > as_of_date:
+                continue
+            if as_of_timestamp is not None:
+                retrieved_at = _timestamp_field(observation, "retrieved_at")
+                ingested_at = _timestamp_field(observation, "ingested_at")
+                if (
+                    retrieved_at is None
+                    or ingested_at is None
+                    or retrieved_at > as_of_timestamp
+                    or ingested_at > as_of_timestamp
+                ):
+                    continue
+                published_at = _timestamp_field(observation, "published_at")
+                if published_at is not None and published_at > as_of_timestamp:
+                    continue
+        except (AttributeError, KeyError, TypeError, ValueError):
+            # A malformed envelope cannot be proven to be known at the
+            # boundary. Excluding it keeps it from contributing a lookahead
+            # value; the daily runner's source-level validation still reports
+            # malformed rows as a failed run.
+            continue
+        known.append(observation)
+    return tuple(known)
+
+
+def _timestamp_field(observation: Any, field_name: str) -> datetime | None:
+    value = (
+        observation.get(field_name)
+        if isinstance(observation, Mapping)
+        else getattr(observation, field_name)
+    )
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise TypeError(f"{field_name} must be a timestamp string")
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"{field_name} must include a timezone")
+    return parsed
 
 
 def _years_before(value: date, years: int) -> date:

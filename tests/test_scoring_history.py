@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, timedelta
 from hashlib import sha256
+
+import pytest
 
 from src.data.storage import Observation
 from src.factors.contracts import (
@@ -245,7 +248,7 @@ def test_omits_factor_ids_with_zero_available_points() -> None:
 
 def test_respects_as_of_boundary_like_the_live_adapters() -> None:
     taiex, pcr, tx, institutional = _dense_fixtures(TARGET, span_days=25)
-    as_of = "2026-09-16T12:00:00+00:00"
+    as_of = "2026-09-17T00:00:00+00:00"
     # This date sits outside the dense 25-day fixture, so it cannot be
     # shadowed by another row for the same date; only the publish-time
     # check below should decide whether it is visible.
@@ -260,7 +263,7 @@ def test_respects_as_of_boundary_like_the_live_adapters() -> None:
         source_record_key="PCR",
         retrieved_at="2026-09-17T00:00:00+00:00",
         ingested_at="2026-09-17T00:00:00+00:00",
-        published_at="2026-09-16T13:00:00+00:00",  # 1 hour after as_of
+        published_at="2026-09-17T01:00:00+00:00",  # 1 hour after as_of
         source_payload_hash="late",
         parser_version="test@0.1",
         values={"put_oi": 500, "call_oi": 100},  # ratio 5.0, distinctive
@@ -284,6 +287,40 @@ def test_respects_as_of_boundary_like_the_live_adapters() -> None:
         institutional_observations=institutional,
         target_date=TARGET,
         as_of=as_of,
+    )
+
+    assert 5.0 not in history[PCR_FACTOR_ID]
+
+
+@pytest.mark.parametrize("field", ["retrieved_at", "ingested_at"])
+def test_history_excludes_evidence_collected_after_as_of(field: str) -> None:
+    taiex, pcr, tx, institutional = _dense_fixtures(TARGET, span_days=25)
+    isolated_day = TARGET - timedelta(days=100)
+    late_collected = _observation(
+        "taifex_txo_oi_pcr_v1",
+        isolated_day,
+        {"put_oi": 500, "call_oi": 100},  # ratio 5.0, distinctive
+        "PCR-late-collected",
+    )
+    late_collected = replace(late_collected, **{field: "2026-09-17T01:00:00+00:00"})
+    vix = [
+        _observation(
+            "taifex_taiwan_vix_close_v1",
+            TARGET - timedelta(days=offset),
+            {"close": 20},
+            "VIX",
+        )
+        for offset in range(25, -1, -1)
+    ]
+
+    history = build_historical_values(
+        taiex_observations=taiex,
+        pcr_observations=[*pcr, late_collected],
+        tx_observations=tx,
+        vix_observations=vix,
+        institutional_observations=institutional,
+        target_date=TARGET,
+        as_of="2026-09-17T00:00:00+00:00",
     )
 
     assert 5.0 not in history[PCR_FACTOR_ID]

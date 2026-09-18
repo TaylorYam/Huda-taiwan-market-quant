@@ -43,10 +43,39 @@ class ScoreObservationReader(Protocol):
 
 
 def _timestamp(value: str) -> datetime:
-    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    if parsed.tzinfo is None:
+    if not isinstance(value, str):
+        raise TypeError("timestamp must be an RFC 3339 string with timezone")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("timestamp must be an RFC 3339 string with timezone") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise ValueError("as-of and observation timestamps must include a timezone")
     return parsed
+
+
+def _target_date(value: str) -> date:
+    """Parse the workflow's canonical ``YYYY-MM-DD`` market-date input."""
+
+    if not isinstance(value, str):
+        raise TypeError("target date must be YYYY-MM-DD")
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError("target date must be YYYY-MM-DD") from exc
+    if parsed.isoformat() != value:
+        raise ValueError("target date must be YYYY-MM-DD")
+    return parsed
+
+
+def _run_window(target_date: str, as_of: str) -> tuple[date, datetime]:
+    """Validate the complete point-in-time window before any I/O."""
+
+    target = _target_date(target_date)
+    boundary = _timestamp(as_of)
+    if target > boundary.astimezone(TAIPEI).date():
+        raise ValueError("target date is after as-of in Asia/Taipei")
+    return target, boundary
 
 
 def run_daily_score(
@@ -64,10 +93,7 @@ def run_daily_score(
     inventing a shortcut distribution. Raw factors still retain their
     evidence in the pipeline.
     """
-    target = date.fromisoformat(target_date)
-    boundary = _timestamp(as_of)
-    if target > boundary.astimezone(TAIPEI).date():
-        raise ValueError("target date is after as-of in Asia/Taipei")
+    target, boundary = _run_window(target_date, as_of)
     # Canonical Taipei time avoids equivalent offsets producing different hashes
     # and keeps the factor adapter's date boundary on the Taiwan market date.
     canonical_as_of = boundary.astimezone(TAIPEI).isoformat()
@@ -78,6 +104,7 @@ def run_daily_score(
         row
         for row in rows
         if row.observation_date <= target.isoformat()
+        and row.quality_status == "available"
         and _timestamp(row.retrieved_at) <= boundary
         and _timestamp(row.ingested_at) <= boundary
         and (row.published_at is None or _timestamp(row.published_at) <= boundary)
@@ -131,8 +158,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     # Validate before connecting; never print remote errors, URLs or credentials.
     try:
-        date.fromisoformat(args.target_date)
-        _timestamp(args.as_of)
+        _run_window(args.target_date, args.as_of)
         url = os.environ["SUPABASE_URL"]
         key = os.environ["SUPABASE_SECRET_KEY"]
         with SupabaseRestObservationStore(url, key) as store:

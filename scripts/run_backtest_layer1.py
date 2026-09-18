@@ -14,7 +14,12 @@ import os
 import sys
 from datetime import date, timedelta
 
-from src.backtest import format_report, run_layer1_backtest
+from src.backtest import (
+    FORWARD_RETURN_HORIZONS,
+    format_report,
+    forward_data_end_date,
+    run_layer1_backtest,
+)
 from src.data.supabase_rest import SupabaseRestObservationStore
 from src.factors.contracts import (
     FOREIGN_CASH_DATASET_ID,
@@ -83,11 +88,14 @@ def main(argv: list[str] | None = None) -> int:
 
         url = os.environ["SUPABASE_URL"]
         key = os.environ["SUPABASE_SECRET_KEY"]
+        # Load beyond the reported signal period so the final days can be
+        # labelled with their 5/10/20 trading-day forward returns.
+        fetch_end = forward_data_end_date(end, FORWARD_RETURN_HORIZONS)
         with SupabaseRestObservationStore(url, key) as store:
             rows = store.load_backtest_observations(
                 dataset_ids=DATASETS,
                 start_date=fetch_from.isoformat(),
-                end_date=end.isoformat(),
+                end_date=fetch_end.isoformat(),
             )
         grouped = {
             dataset: [row for row in rows if row.dataset_id == dataset]

@@ -180,8 +180,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 if target.weekday() >= 5:
                     continue
                 tx.extend(fetch_tx_day(target, market_code=0, http_post=post))
-                if args.request_delay:
-                    time.sleep(args.request_delay)
+                # The date-based report is a public HTML endpoint rather than
+                # a bulk API.  Keep at least one second between requests so a
+                # long GitHub runner backfill does not trigger throttling.
+                time.sleep(max(args.request_delay, 1.0))
         collected["tx"] = tx
 
         if args.dry_run:

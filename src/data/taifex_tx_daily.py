@@ -124,8 +124,8 @@ def fetch_tx_day(
     market_code: int = 0,
     http_post: Callable[[str, Mapping[str, str]], bytes] | None = None,
     parser_version: str = TX_DAILY_PARSER_VERSION,
-    retries: int = 2,
-    retry_delay: float = 1.0,
+    retries: int = 5,
+    retry_delay: float = 2.0,
 ) -> list[Observation]:
     """Fetch and parse one official date-based TX report."""
 

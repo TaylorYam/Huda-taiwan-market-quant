@@ -304,7 +304,156 @@ class SupabaseRestObservationStore:
                     "supersedes_id must reference the same observation identity"
                 )
 
-        payload = {
+        payload = self._observation_payload(observation, supersedes_id=supersedes_id)
+        inserted = self._request(
+            "POST",
+            "/observations",
+            json_body=payload,
+            prefer="return=representation",
+        )
+        if not inserted:
+            raise RuntimeError("Supabase did not return the inserted observation")
+        return WriteResult(inserted[0]["id"], "inserted")
+
+    def write_observations(
+        self, observations: Sequence[Observation]
+    ) -> list[WriteResult]:
+        """Write a range with one read and one bulk insert instead of one request per row.
+
+        Range backfills contain hundreds of independent daily rows.  The normal
+        single-row contract remains the source of truth for live ingestion, but
+        a bulk path keeps a one-time historical backfill within normal API and
+        runner limits while preserving exact-payload deduplication.
+        """
+
+        if not observations:
+            return []
+        for observation in observations:
+            _validate_observation(observation)
+
+        datasets = sorted({observation.dataset_id for observation in observations})
+        start = min(observation.observation_date for observation in observations)
+        end = max(observation.observation_date for observation in observations)
+        existing: list[dict[str, Any]] = []
+        for dataset_id in datasets:
+            existing.extend(
+                self._request(
+                    "GET",
+                    "/observations",
+                    params={
+                        "select": (
+                            "id,dataset_id,observation_date,source_record_key,"
+                            "publication_label,source_revision,source_payload_hash,"
+                            "retrieval_count,last_retrieved_at"
+                        ),
+                        "dataset_id": f"eq.{dataset_id}",
+                        "observation_date": [f"gte.{start}", f"lte.{end}"],
+                        "limit": "1000",
+                    },
+                )
+            )
+
+        exact: dict[tuple[str, str, str, str, str, str], dict[str, Any]] = {}
+        latest_by_base: dict[tuple[str, str, str, str, str], dict[str, Any]] = {}
+        for row in existing:
+            exact[self._observation_identity_key(row)] = row
+            base = self._observation_base_key(row)
+            prior = latest_by_base.get(base)
+            if prior is None or int(row["id"]) > int(prior["id"]):
+                latest_by_base[base] = row
+
+        results: list[WriteResult | None] = [None] * len(observations)
+        pending: list[
+            tuple[int, tuple[str, str, str, str, str, str], dict[str, Any]]
+        ] = []
+        for index, observation in enumerate(observations):
+            key = self._observation_identity_key(observation)
+            duplicate = exact.get(key)
+            if duplicate is not None:
+                latest_retrieved_at = (
+                    observation.retrieved_at
+                    if _parse_timestamp(observation.retrieved_at, "retrieved_at")
+                    > _parse_timestamp(
+                        duplicate["last_retrieved_at"], "last_retrieved_at"
+                    )
+                    else duplicate["last_retrieved_at"]
+                )
+                self._request(
+                    "PATCH",
+                    "/observations",
+                    params={"id": f"eq.{duplicate['id']}"},
+                    json_body={
+                        "last_retrieved_at": latest_retrieved_at,
+                        "retrieval_count": int(duplicate["retrieval_count"]) + 1,
+                    },
+                    prefer="return=minimal",
+                )
+                results[index] = WriteResult(int(duplicate["id"]), "duplicate")
+                continue
+
+            base = self._observation_base_key(observation)
+            previous = latest_by_base.get(base)
+            supersedes_id = observation.supersedes_id
+            if previous is not None and supersedes_id is None:
+                supersedes_id = int(previous["id"])
+            payload = self._observation_payload(
+                observation, supersedes_id=supersedes_id
+            )
+            pending.append((index, key, payload))
+
+        if pending:
+            inserted = self._request(
+                "POST",
+                "/observations",
+                json_body=[payload for _, _, payload in pending],
+                prefer="return=representation",
+            )
+            if len(inserted) != len(pending):
+                raise RuntimeError(
+                    "Supabase did not return every bulk-inserted observation"
+                )
+            inserted_by_key = {
+                self._observation_identity_key(row): row for row in inserted
+            }
+            for index, key, _ in pending:
+                row = inserted_by_key.get(key)
+                if row is None:
+                    raise RuntimeError(
+                        "Supabase bulk response omitted an inserted observation"
+                    )
+                results[index] = WriteResult(int(row["id"]), "inserted")
+
+        return [result for result in results if result is not None]
+
+    @staticmethod
+    def _observation_identity_key(
+        value: Mapping[str, Any] | Observation,
+    ) -> tuple[str, str, str, str, str, str]:
+        def field(name: str) -> str:
+            raw = value[name] if isinstance(value, Mapping) else getattr(value, name)
+            return "" if raw is None else str(raw)
+
+        return (
+            field("dataset_id"),
+            field("observation_date"),
+            field("source_record_key"),
+            field("publication_label"),
+            field("source_revision"),
+            field("source_payload_hash"),
+        )
+
+    @staticmethod
+    def _observation_base_key(
+        value: Mapping[str, Any] | Observation,
+    ) -> tuple[str, str, str, str, str]:
+        key = SupabaseRestObservationStore._observation_identity_key(value)
+        return key[:-1]
+
+    @staticmethod
+    def _observation_payload(
+        observation: Observation, *, supersedes_id: int | None
+    ) -> dict[str, Any]:
+        return {
             "dataset_id": observation.dataset_id,
             "schema_version": observation.schema_version,
             "observation_date": observation.observation_date,
@@ -328,15 +477,6 @@ class SupabaseRestObservationStore:
             "retrieval_count": 1,
             "created_at": _utc_now(),
         }
-        inserted = self._request(
-            "POST",
-            "/observations",
-            json_body=payload,
-            prefer="return=representation",
-        )
-        if not inserted:
-            raise RuntimeError("Supabase did not return the inserted observation")
-        return WriteResult(inserted[0]["id"], "inserted")
 
     def get_observation(self, observation_id: int) -> Observation | None:
         rows = self._select({"id": observation_id}, "*")
@@ -368,7 +508,7 @@ class SupabaseRestObservationStore:
         path: str,
         *,
         params: dict[str, Any] | None = None,
-        json_body: dict[str, Any] | None = None,
+        json_body: Any = None,
         prefer: str | None = None,
     ) -> Any:
         headers = {"Prefer": prefer} if prefer else None

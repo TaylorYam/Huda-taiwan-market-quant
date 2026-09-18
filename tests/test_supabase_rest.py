@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from src.data import SupabaseRestObservationStore
+from src.data import Observation, SupabaseRestObservationStore
 
 
 class FakeResponse:
@@ -39,6 +39,73 @@ class ScoreSession(FakeSession):
             response.text = response.content.decode()
             response.json = lambda: [{"id": 9}]  # type: ignore[method-assign]
         return response
+
+
+class BulkObservationSession(FakeSession):
+    def request(self, method: str, url: str, **kwargs: Any) -> FakeResponse:
+        self.calls.append({"method": method, "url": url, **kwargs})
+        response = FakeResponse()
+        if method == "POST" and url.endswith("/rest/v1/observations"):
+            payload = kwargs["json"]
+            response.content = b"[{}]"
+            response.text = response.content.decode()
+            response.json = lambda payload=payload: [
+                {
+                    "id": 21,
+                    "dataset_id": row["dataset_id"],
+                    "observation_date": row["observation_date"],
+                    "source_record_key": row["source_record_key"],
+                    "publication_label": row["publication_label"],
+                    "source_revision": row["source_revision"],
+                    "source_payload_hash": row["source_payload_hash"],
+                }
+                for row in payload
+            ]  # type: ignore[method-assign]
+        return response
+
+
+def _range_observation() -> Observation:
+    return Observation(
+        dataset_id="taifex_taiwan_vix_close_v1",
+        schema_version="0.1",
+        observation_date="2026-09-17",
+        source_date="20260917",
+        source_name="TAIFEX",
+        source_url="https://example.test/vix",
+        source_record_key="VIX:daily",
+        retrieved_at="2026-09-18T00:00:00+00:00",
+        ingested_at="2026-09-18T00:00:00+00:00",
+        source_payload_hash="1" * 64,
+        parser_version="test@0.1",
+        values={"close": 27.29},
+        quality_status="available",
+    )
+
+
+def test_supabase_rest_bulk_writes_range_in_one_insert() -> None:
+    session = BulkObservationSession()
+
+    with SupabaseRestObservationStore(
+        "https://example.supabase.co",
+        "sb_secret_test",
+        session=session,
+    ) as store:
+        result = store.write_observations([_range_observation()])
+
+    assert result[0].observation_id == 21
+    assert result[0].action == "inserted"
+    range_reads = [
+        call
+        for call in session.calls
+        if call["method"] == "GET"
+        and call["url"].endswith("/rest/v1/observations")
+        and call["params"].get("limit") == "1000"
+    ]
+    assert len(range_reads) == 1
+    post = session.calls[-1]
+    assert post["method"] == "POST"
+    assert isinstance(post["json"], list)
+    assert post["json"][0]["values_json"] == {"close": 27.29}
 
 
 def test_supabase_rest_store_uses_server_api_key_and_checks_table() -> None:

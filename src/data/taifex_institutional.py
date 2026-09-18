@@ -361,6 +361,9 @@ def collect_institutional_futures_range(
         http_post=http_post,
         parser_version=parser_version,
     )
+    batch_writer = getattr(store, "write_observations", None)
+    if callable(batch_writer):
+        return batch_writer(observations)
     results: list[WriteResult] = []
     for observation in observations:
         previous_id = _latest_observation_id(store, observation)

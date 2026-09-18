@@ -361,7 +361,13 @@ def test_tradingview_kline_html_links_selected_factor_pane():
     assert 'id="factor-tabs"' in html
     assert 'id="factor-chart"' in html
     assert 'aria-label="分類與因子"' in html
+    assert html.index("各因子分數趨勢") < html.index("分類與因子")
     assert "const factorData" in html
+    assert "const factorPalette" in html
+    assert "factorColorByLabel" in html
+    assert (
+        "factorSeries.applyOptions({ color: factorColorByLabel.get(factorLabel)" in html
+    )
     assert "factorSeries.setData(rows)" in html
     assert "selectedFactorByTime" in html
     assert "factorChart.priceScale('right').applyOptions({ autoScale: true })" in html

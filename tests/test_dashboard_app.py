@@ -275,6 +275,7 @@ def test_tradingview_kline_html_uses_visible_range_auto_scale_and_zoom():
     assert "lightweight-charts@4.2.2" in html
     assert "addCandlestickSeries" in html
     assert "autoScale: true" in html
+    assert "minimumWidth: 120" in html
     assert "mouseWheel: true" in html
     assert "pressedMouseMove: true" in html
     assert "setVisibleLogicalRange" in html

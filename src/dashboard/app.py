@@ -317,7 +317,7 @@ def build_tradingview_kline_html(
     :root { color-scheme: light; }
     html, body { margin: 0; padding: 0; background: #ffffff; }
     body { overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    .shell { width: 100%; height: 980px; display: flex; flex-direction: column; background: #ffffff; }
+    .shell { width: 100%; height: 1020px; display: flex; flex-direction: column; background: #ffffff; }
     .legend { height: 42px; padding: 8px 14px 0; box-sizing: border-box; color: #1f2937; font-size: 13px; line-height: 20px; }
     .title { font-weight: 700; letter-spacing: .01em; }
     .values { color: #4b5563; margin-left: 12px; }
@@ -336,11 +336,11 @@ def build_tradingview_kline_html(
     .factor-table th { position: sticky; top: 0; background: #f8fafc; color: #6b7280; font-weight: 600; }
     .factor-table tr:last-child td { border-bottom: 0; }
     .table-note { margin: 5px 0 0; color: #9ca3af; font-size: 11px; }
-    .factor-panel { flex: 1 1 auto; min-height: 200px; display: flex; flex-direction: column; border-top: 1px solid #e5e7eb; }
+    .factor-panel { flex: 0 0 200px; min-height: 200px; display: flex; flex-direction: column; border-top: 1px solid #e5e7eb; }
     .factor-title { height: 26px; padding: 5px 14px 0; box-sizing: border-box; color: #4b5563; font-size: 12px; }
     .factor-tabs { display: flex; gap: 4px; height: 36px; padding: 2px 14px 5px; box-sizing: border-box; overflow-x: auto; }
     .factor-tab { flex: 0 0 auto; border: 1px solid #d1d5db; border-radius: 5px; background: #ffffff; color: #4b5563; padding: 3px 9px; font: inherit; font-size: 12px; cursor: pointer; }
-    .factor-tab[aria-selected="true"] { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; font-weight: 600; }
+    .factor-tab[aria-selected="true"] { border-color: var(--factor-color, #2563eb); background: #eff6ff; color: var(--factor-color, #1d4ed8); font-weight: 600; }
     #factor-chart { flex: 1 1 auto; min-height: 138px; }
   </style>
 </head>
@@ -353,8 +353,8 @@ def build_tradingview_kline_html(
     <div id="price-chart" class="pane" aria-label="台指大盤日 K 線圖"></div>
     """
         + score_markup
-        + factor_table_html
         + factor_markup
+        + factor_table_html
         + """
   </div>
   <script src="""
@@ -486,6 +486,13 @@ def build_tradingview_kline_html(
     let factorSeries = null;
     let selectedFactorByTime = new Map();
     const factorLabels = Object.keys(factorData);
+    const factorPalette = [
+      '#2563eb', '#dc2626', '#059669', '#d97706',
+      '#7c3aed', '#0891b2', '#db2777', '#4f46e5'
+    ];
+    const factorColorByLabel = new Map(
+      factorLabels.map((label, index) => [label, factorPalette[index % factorPalette.length]])
+    );
     const updateFactorButtons = (selectedLabel) => {
       if (!factorTabsElement) return;
       factorTabsElement.querySelectorAll('button').forEach((button) => {
@@ -497,6 +504,7 @@ def build_tradingview_kline_html(
       const rows = factorData[factorLabel] || [];
       const visibleRange = factorChart.timeScale().getVisibleRange();
       factorSeries.setData(rows);
+      factorSeries.applyOptions({ color: factorColorByLabel.get(factorLabel) || factorPalette[0] });
       selectedFactorByTime = new Map(
         rows
           .filter((point) => point.value !== undefined)
@@ -509,7 +517,7 @@ def build_tradingview_kline_html(
     if (factorElement && factorLabels.length) {
       factorChart = LightweightCharts.createChart(factorElement, chartOptions(true));
       factorSeries = factorChart.addLineSeries({
-        color: '#2563eb',
+        color: factorColorByLabel.get(factorLabels[0]) || factorPalette[0],
         lineWidth: 2,
         priceLineVisible: false,
         lastValueVisible: true,
@@ -523,6 +531,7 @@ def build_tradingview_kline_html(
         button.dataset.factor = factorLabel;
         button.setAttribute('role', 'tab');
         button.setAttribute('aria-selected', 'false');
+        button.style.setProperty('--factor-color', factorColorByLabel.get(factorLabel) || factorPalette[0]);
         button.textContent = factorLabel;
         button.addEventListener('click', () => selectFactor(factorLabel));
         factorTabsElement.appendChild(button);
@@ -649,7 +658,7 @@ def render_history_charts(
     if kline_html is None:
         st.info("目前沒有可繪製的 TAIEX OHLC 資料。")
     else:
-        components.html(kline_html, height=980, scrolling=False)
+        components.html(kline_html, height=1020, scrolling=False)
         st.caption(
             "操作：滑鼠滾輪縮放時間範圍；按住滑鼠左鍵左右拖曳平移；K 線、Market Score 與選定因子會同步定位，各副圖 Y 軸依目前可見資料自動調整。"
         )

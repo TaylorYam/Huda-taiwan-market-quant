@@ -23,6 +23,7 @@ from src.data import (
     fetch_market_turnover_month,
     fetch_pcr_day,
     fetch_taiex_month,
+    fetch_tx_day,
     fetch_tx_year,
 )
 from src.data.storage import Observation, WriteResult
@@ -166,6 +167,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             tx.extend(
                 _filter_range(fetch_tx_year(year, http_post=post), args.start, args.end)
             )
+        # TAIFEX publishes the current year through the date-based daily page;
+        # the annual ZIP appears only after the calendar year closes.  Keep the
+        # day session because the basis adapter intentionally selects session
+        # ``一般`` and does not need the after-hours duplicate.
+        current_year_start = max(args.start, date(2026, 1, 1))
+        if current_year_start <= args.end:
+            for target in _dates(current_year_start, args.end):
+                tx.extend(fetch_tx_day(target, market_code=0, http_post=post))
+                if args.request_delay:
+                    time.sleep(args.request_delay)
         collected["tx"] = tx
 
         if args.dry_run:
@@ -181,8 +192,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                     )
         print(f"cash skipped non-trading/unavailable days: {skipped_cash}")
         print(
-            "TX current-year archive: not available in the official annual endpoint; "
-            "the range ends at the latest complete annual archive (2025)."
+            "TX source: annual ZIP through 2025 plus the official date-based "
+            "day-session report for 2026 and later."
         )
         return 0
     except Exception as exc:  # noqa: BLE001 - CLI boundary keeps logs actionable

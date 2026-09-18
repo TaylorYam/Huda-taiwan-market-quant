@@ -49,7 +49,7 @@ def display_score(value: object, status: str) -> str:
     except (TypeError, ValueError):
         return "unavailable"
     return (
-        f"{number:g} / 100"
+        f"{number:.1f} / 100"
         if isfinite(number) and 0 <= number <= 100
         else "unavailable"
     )
@@ -144,6 +144,8 @@ def score_history_frame(rows: object) -> pd.DataFrame:
             if status == "available"
             else None
         )
+        if score is not None:
+            score = round(score, 1)
         output.append(
             {"日期": target, "Market Score": score, "狀態": status or "unavailable"}
         )
@@ -190,6 +192,8 @@ def factor_history_frame(rows: object) -> pd.DataFrame:
                 item[label] = _finite_number(
                     factor.get("score"), minimum=0, maximum=100
                 )
+                if item[label] is not None:
+                    item[label] = round(item[label], 1)
             else:
                 item[label] = None
         output.append(item)
@@ -461,7 +465,19 @@ def build_tradingview_kline_html(
     )
 
 
-def render_history_charts(store: DashboardDataStore) -> None:
+def render_factor_table(record: dict | None) -> None:
+    if record is None:
+        return
+    st.subheader("分類與因子")
+    st.dataframe(factor_rows(record), hide_index=True, width="stretch")
+    st.caption(
+        "顯示已儲存的因子分數；目前持久化格式未包含原始值或分類總分，本頁不重新計算。"
+    )
+
+
+def render_history_charts(
+    store: DashboardDataStore, latest_score: dict | None = None
+) -> None:
     """Render read-only trend views from persisted rows only."""
 
     st.header("歷史趨勢")
@@ -498,6 +514,8 @@ def render_history_charts(store: DashboardDataStore) -> None:
         st.info("目前沒有完整的 TAIEX OHLC 資料可繪圖。")
     if len(ohlc) < len(_latest_rows_by_date(_as_rows(taiex_rows))):
         st.caption("部分日期缺少完整 OHLC 或品質不可用，已從 K 線排除。")
+
+    render_factor_table(latest_score)
 
     try:
         factor_rows_history = store.get_market_score_history(limit=CHART_LIMIT)
@@ -553,11 +571,6 @@ def render_score(record: dict | None) -> None:
     st.text(f"分數寫入時間：{record.get('created_at') or '未記錄'}")
     if record.get("reason"):
         st.text(f"原因：{record['reason']}")
-    st.subheader("分類與因子")
-    st.dataframe(factor_rows(record), hide_index=True, width="stretch")
-    st.caption(
-        "顯示已儲存的因子分數；目前持久化格式未包含原始值或分類總分，本頁不重新計算。"
-    )
 
 
 def _parse_source_timestamp(value: object) -> tuple[str, datetime | None]:
@@ -655,14 +668,16 @@ def main() -> None:
     # Streamlit. Data API errors may include sensitive server information.
     try:
         with DashboardDataStore(url, key, timeout=10) as store:
+            latest_score = None
             try:
-                render_score(store.get_latest_market_score())
+                latest_score = store.get_latest_market_score()
+                render_score(latest_score)
             except READ_ERRORS:
                 st.error(
                     "無法讀取 Market Score。請維護者確認 market_scores 表、Data API 權限與網路連線。"
                 )
             try:
-                render_history_charts(store)
+                render_history_charts(store, latest_score)
             except READ_ERRORS:
                 st.warning("歷史趨勢暫時無法顯示；最新分數與來源狀態仍可查看。")
             try:

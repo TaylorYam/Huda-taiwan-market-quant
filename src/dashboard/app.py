@@ -195,39 +195,13 @@ def factor_history_frame(rows: object) -> pd.DataFrame:
     return pd.DataFrame(output, columns=["日期", *FACTOR_LABELS.values()])
 
 
-def render_history_charts(store: DashboardDataStore) -> None:
-    """Render read-only trend views from persisted rows only."""
+def build_interactive_market_chart(
+    ohlc: pd.DataFrame, score_plot: pd.DataFrame
+) -> alt.TopLevelMixin | None:
+    """Build a TradingView-like K-line/score view with shared zoom controls."""
 
-    st.header("歷史趨勢")
-    try:
-        score_rows = store.get_market_score_history(limit=CHART_LIMIT)
-    except READ_ERRORS:
-        st.warning("無法讀取 Market Score 歷史，暫不顯示評分趨勢圖。")
-        score_rows = []
-    score_frame = score_history_frame(score_rows)
-    score_plot = score_frame.dropna(subset=["Market Score"])
-    st.subheader("Market Score 趨勢")
-    if score_plot.empty:
-        st.info(
-            "目前沒有可繪製的 available Market Score；unavailable 日期不會被當成 0。"
-        )
-    else:
-        st.line_chart(
-            score_plot.set_index("日期")["Market Score"], y_label="分數", height=240
-        )
-    if not score_frame.empty and score_frame["狀態"].ne("available").any():
-        st.caption("部分評分日期為 unavailable，已保留狀態但未繪入數值線。")
-
-    try:
-        taiex_rows = store.get_observation_history(TAIEX_DATASET_ID, limit=CHART_LIMIT)
-    except READ_ERRORS:
-        st.warning("無法讀取 TAIEX 歷史，暫不顯示 K 線圖。")
-        taiex_rows = []
-    ohlc = taiex_ohlc_frame(taiex_rows)
-    st.subheader("台指大盤 K 線")
-    if ohlc.empty:
-        st.info("目前沒有完整的 TAIEX OHLC 資料可繪圖。")
-    else:
+    charts: list[alt.Chart] = []
+    if not ohlc.empty:
         chart_data = ohlc.copy()
         chart_data["日期"] = pd.to_datetime(chart_data["日期"])
         base = alt.Chart(chart_data).encode(
@@ -240,7 +214,9 @@ def render_history_charts(store: DashboardDataStore) -> None:
                 alt.Tooltip("close:Q", title="收盤", format=",.2f"),
             ],
         )
-        wick = base.mark_rule().encode(y=alt.Y("low:Q", title="指數"), y2="high:Q")
+        wick = base.mark_rule().encode(
+            y=alt.Y("low:Q", title="指數"), y2="high:Q"
+        )
         body = base.mark_bar(size=7).encode(
             y="open:Q",
             y2="close:Q",
@@ -250,7 +226,75 @@ def render_history_charts(store: DashboardDataStore) -> None:
                 alt.value("#2f8f67"),
             ),
         )
-        st.altair_chart((wick + body).properties(height=320), use_container_width=True)
+        charts.append(
+            (wick + body)
+            .properties(height=320, title="台指大盤 K 線（主圖）")
+            .resolve_scale(y="independent")
+        )
+
+    if not score_plot.empty:
+        score_data = score_plot.copy()
+        score_data["日期"] = pd.to_datetime(score_data["日期"])
+        charts.append(
+            alt.Chart(score_data)
+            .mark_line(point=True)
+            .encode(
+                x=alt.X("日期:T", title="日期"),
+                y=alt.Y("Market Score:Q", title="分數", scale=alt.Scale(domain=[0, 100])),
+                tooltip=[
+                    alt.Tooltip("日期:T", title="日期"),
+                    alt.Tooltip("Market Score:Q", title="Market Score", format=",.2f"),
+                ],
+            )
+            .properties(height=160, title="Market Score（副圖）")
+        )
+
+    if not charts:
+        return None
+    chart: alt.TopLevelMixin
+    if len(charts) == 1:
+        chart = charts[0]
+    else:
+        chart = alt.vconcat(*charts).resolve_scale(x="shared", y="independent")
+    zoom = alt.selection_interval(
+        name="market_chart_zoom", bind="scales", encodings=["x", "y"]
+    )
+    return chart.add_params(zoom)
+
+
+def render_history_charts(store: DashboardDataStore) -> None:
+    """Render read-only trend views from persisted rows only."""
+
+    st.header("歷史趨勢")
+    try:
+        score_rows = store.get_market_score_history(limit=CHART_LIMIT)
+    except READ_ERRORS:
+        st.warning("無法讀取 Market Score 歷史，暫不顯示評分趨勢圖。")
+        score_rows = []
+    score_frame = score_history_frame(score_rows)
+    score_plot = score_frame.dropna(subset=["Market Score"])
+
+    try:
+        taiex_rows = store.get_observation_history(TAIEX_DATASET_ID, limit=CHART_LIMIT)
+    except READ_ERRORS:
+        st.warning("無法讀取 TAIEX 歷史，暫不顯示 K 線圖。")
+        taiex_rows = []
+    ohlc = taiex_ohlc_frame(taiex_rows)
+    st.subheader("台指大盤 K 線與 Market Score")
+    market_chart = build_interactive_market_chart(ohlc, score_plot)
+    if market_chart is None:
+        st.info("目前沒有可繪製的 TAIEX OHLC 或 available Market Score 資料。")
+    else:
+        st.altair_chart(market_chart, use_container_width=True)
+        st.caption("操作：滑鼠滾輪縮放 X/Y 軸；拖曳平移；雙擊重設視圖。")
+    if score_plot.empty:
+        st.info(
+            "目前沒有可繪製的 available Market Score；unavailable 日期不會被當成 0。"
+        )
+    elif not score_frame.empty and score_frame["狀態"].ne("available").any():
+        st.caption("部分評分日期為 unavailable，已保留狀態但未繪入數值線。")
+    if ohlc.empty:
+        st.info("目前沒有完整的 TAIEX OHLC 資料可繪圖。")
     if len(ohlc) < len(_latest_rows_by_date(_as_rows(taiex_rows))):
         st.caption("部分日期缺少完整 OHLC 或品質不可用，已從 K 線排除。")
 

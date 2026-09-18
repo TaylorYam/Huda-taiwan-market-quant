@@ -9,7 +9,6 @@ from datetime import datetime
 from math import isfinite
 from urllib.parse import urlsplit
 
-import altair as alt
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
@@ -203,8 +202,10 @@ TRADINGVIEW_LIBRARY_URL = (
 )
 
 
-def build_tradingview_kline_html(ohlc: pd.DataFrame) -> str | None:
-    """Build a self-contained TradingView Lightweight Charts candlestick view.
+def build_tradingview_kline_html(
+    ohlc: pd.DataFrame, score_plot: pd.DataFrame | None = None
+) -> str | None:
+    """Build linked TradingView Lightweight Charts price and score panes.
 
     The library's price scale is deliberately left in auto-scale mode. That
     makes the right axis follow the highest and lowest candles in the current
@@ -227,7 +228,21 @@ def build_tradingview_kline_html(ohlc: pd.DataFrame) -> str | None:
         rows.append({"time": date, **numbers})
     if not rows:
         return None
+    score_rows = []
+    if score_plot is not None:
+        for row in score_plot.to_dict("records"):
+            date = row.get("日期")
+            score = _finite_number(row.get("Market Score"), minimum=0, maximum=100)
+            if isinstance(date, str) and date and score is not None:
+                score_rows.append({"time": date, "value": score})
     payload = json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
+    score_payload = json.dumps(score_rows, ensure_ascii=False, separators=(",", ":"))
+    score_markup = (
+        """<div class="score-title">Market Score（副圖）</div>
+    <div id="score-chart" class="pane" aria-label="Market Score 趨勢圖"></div>"""
+        if score_rows
+        else ""
+    )
     return (
         """<!doctype html>
 <html lang="zh-Hant">
@@ -238,14 +253,17 @@ def build_tradingview_kline_html(ohlc: pd.DataFrame) -> str | None:
     :root { color-scheme: light; }
     html, body { margin: 0; padding: 0; background: #ffffff; }
     body { overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    .shell { width: 100%; height: 560px; display: flex; flex-direction: column; background: #ffffff; }
+    .shell { width: 100%; height: 640px; display: flex; flex-direction: column; background: #ffffff; }
     .legend { height: 42px; padding: 8px 14px 0; box-sizing: border-box; color: #1f2937; font-size: 13px; line-height: 20px; }
     .title { font-weight: 700; letter-spacing: .01em; }
     .values { color: #4b5563; margin-left: 12px; }
     .values span { margin-right: 10px; }
     .values .positive { color: #0f9f91; }
     .values .negative { color: #e05252; }
-    #chart { flex: 1; min-height: 0; }
+    .pane { width: 100%; min-height: 0; }
+    #price-chart { flex: 1 1 auto; min-height: 430px; }
+    .score-title { height: 26px; padding: 5px 14px 0; box-sizing: border-box; color: #4b5563; font-size: 12px; border-top: 1px solid #e5e7eb; }
+    #score-chart { flex: 0 0 150px; }
   </style>
 </head>
 <body>
@@ -254,18 +272,41 @@ def build_tradingview_kline_html(ohlc: pd.DataFrame) -> str | None:
       <span class="title">TSEC WEIGHTED INDEX · 1D</span>
       <span class="values" id="values"></span>
     </div>
-    <div id="chart" aria-label="台指大盤日 K 線圖"></div>
+    <div id="price-chart" class="pane" aria-label="台指大盤日 K 線圖"></div>
+    """
+        + score_markup
+        + """
   </div>
   <script src="""
         + TRADINGVIEW_LIBRARY_URL
         + """></script>
   <script>
-    const data = """
+    const candleData = """
         + payload
         + """;
-    const chartElement = document.getElementById('chart');
+    const scoreData = """
+        + score_payload
+        + """;
+    const priceElement = document.getElementById('price-chart');
     const valuesElement = document.getElementById('values');
-    const chart = LightweightCharts.createChart(chartElement, {
+    const scoreElement = document.getElementById('score-chart');
+    const interactionOptions = {
+      crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+      handleScroll: {
+        mouseWheel: false,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: false
+      },
+      handleScale: {
+        mouseWheel: true,
+        pinch: true,
+        axisPressedMouseMove: true,
+        axisDoubleClickReset: true,
+        axisLabelPressedMouseMove: true
+      }
+    };
+    const chartOptions = (showTimeAxis) => ({
       autoSize: true,
       layout: { background: { color: '#ffffff' }, textColor: '#374151', fontSize: 12 },
       grid: {
@@ -282,28 +323,17 @@ def build_tradingview_kline_html(ohlc: pd.DataFrame) -> str | None:
         rightOffset: 8,
         barSpacing: 8,
         minBarSpacing: 3,
-        timeVisible: false,
+        timeVisible: showTimeAxis,
         secondsVisible: false,
+        visible: showTimeAxis,
         fixLeftEdge: false,
         fixRightEdge: false,
         rightBarStaysOnScroll: true
       },
-      crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-      handleScroll: {
-        mouseWheel: false,
-        pressedMouseMove: true,
-        horzTouchDrag: true,
-        vertTouchDrag: false
-      },
-      handleScale: {
-        mouseWheel: true,
-        pinch: true,
-        axisPressedMouseMove: true,
-        axisDoubleClickReset: true,
-        axisLabelPressedMouseMove: true
-      }
+      ...interactionOptions
     });
-    const candles = chart.addCandlestickSeries({
+    const priceChart = LightweightCharts.createChart(priceElement, chartOptions(false));
+    const candles = priceChart.addCandlestickSeries({
       upColor: '#26a69a',
       downColor: '#ef5350',
       borderUpColor: '#26a69a',
@@ -313,8 +343,8 @@ def build_tradingview_kline_html(ohlc: pd.DataFrame) -> str | None:
       priceLineVisible: true,
       lastValueVisible: true
     });
-    candles.setData(data);
-    const latest = data[data.length - 1];
+    candles.setData(candleData);
+    const latest = candleData[candleData.length - 1];
     const renderValues = (point) => {
       if (!point) return;
       const cls = point.close >= point.open ? 'positive' : 'negative';
@@ -325,42 +355,93 @@ def build_tradingview_kline_html(ohlc: pd.DataFrame) -> str | None:
         '<span class="' + cls + '">收 ' + Number(point.close).toLocaleString(undefined, { maximumFractionDigits: 2 }) + '</span>';
     };
     renderValues(latest);
-    chart.subscribeCrosshairMove((param) => {
+    const candleByTime = new Map(candleData.map((point) => [point.time, point]));
+    priceChart.subscribeCrosshairMove((param) => {
       const point = param.seriesData.get(candles);
       renderValues(point || latest);
     });
-    const start = Math.max(0, data.length - 180);
-    chart.timeScale().setVisibleLogicalRange({ from: start, to: data.length + 8 });
+    const charts = [priceChart];
+    let scoreChart = null;
+    let scoreSeries = null;
+    const scoreByTime = new Map(scoreData.map((point) => [point.time, point.value]));
+    if (scoreElement && scoreData.length) {
+      scoreChart = LightweightCharts.createChart(scoreElement, chartOptions(true));
+      scoreSeries = scoreChart.addLineSeries({
+        color: '#2563eb',
+        lineWidth: 2,
+        priceLineVisible: false,
+        lastValueVisible: true,
+        crosshairMarkerVisible: true
+      });
+      scoreSeries.setData(scoreData);
+      scoreChart.applyOptions({
+        rightPriceScale: { scaleMargins: { top: 0.12, bottom: 0.12 } }
+      });
+      scoreSeries.createPriceLine({
+        price: 50,
+        color: '#9ca3af',
+        lineWidth: 1,
+        lineStyle: LightweightCharts.LineStyle.Dashed,
+        axisLabelVisible: false,
+        title: '中性'
+      });
+      charts.push(scoreChart);
+    }
+    let syncingRange = false;
+    charts.forEach((source) => {
+      source.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+        if (syncingRange || !range) return;
+        syncingRange = true;
+        charts.forEach((target) => {
+          if (target !== source) target.timeScale().setVisibleLogicalRange(range);
+        });
+        syncingRange = false;
+      });
+    });
+    const timeKey = (time) => {
+      if (typeof time === 'string') return time;
+      if (time && typeof time === 'object' && 'year' in time) {
+        return [time.year, String(time.month).padStart(2, '0'), String(time.day).padStart(2, '0')].join('-');
+      }
+      return null;
+    };
+    let syncingCrosshair = false;
+    if (scoreChart && scoreSeries) {
+      priceChart.subscribeCrosshairMove((param) => {
+        if (syncingCrosshair) return;
+        syncingCrosshair = true;
+        const key = timeKey(param.time);
+        const score = scoreByTime.get(key);
+        if (score !== undefined) {
+          scoreChart.setCrosshairPosition(score, param.time, scoreSeries);
+          const candle = candleByTime.get(key);
+          if (candle) renderValues(candle);
+        } else {
+          scoreChart.clearCrosshairPosition();
+        }
+        syncingCrosshair = false;
+      });
+      scoreChart.subscribeCrosshairMove((param) => {
+        if (syncingCrosshair) return;
+        syncingCrosshair = true;
+        const key = timeKey(param.time);
+        const candle = candleByTime.get(key);
+        if (candle) {
+          priceChart.setCrosshairPosition(candle.close, param.time, candles);
+          renderValues(candle);
+        } else {
+          priceChart.clearCrosshairPosition();
+        }
+        syncingCrosshair = false;
+      });
+    }
+    const start = Math.max(0, candleData.length - 180);
+    const initialRange = { from: start, to: candleData.length + 8 };
+    charts.forEach((chart) => chart.timeScale().setVisibleLogicalRange(initialRange));
   </script>
 </body>
 </html>
 """
-    )
-
-
-def build_market_score_chart(score_plot: pd.DataFrame) -> alt.TopLevelMixin | None:
-    """Build the independent Market Score trend chart."""
-
-    if score_plot.empty:
-        return None
-    score_data = score_plot.copy()
-    score_data["日期"] = pd.to_datetime(score_data["日期"])
-    zoom = alt.selection_interval(
-        name="market_score_zoom", bind="scales", encodings=["x", "y"]
-    )
-    return (
-        alt.Chart(score_data)
-        .mark_line(point=True, color="#2563eb")
-        .encode(
-            x=alt.X("日期:T", title="日期"),
-            y=alt.Y("Market Score:Q", title="分數", scale=alt.Scale(domain=[0, 100])),
-            tooltip=[
-                alt.Tooltip("日期:T", title="日期"),
-                alt.Tooltip("Market Score:Q", title="Market Score", format=",.2f"),
-            ],
-        )
-        .properties(height=220, title="Market Score 趨勢")
-        .add_params(zoom)
     )
 
 
@@ -383,18 +464,14 @@ def render_history_charts(store: DashboardDataStore) -> None:
         taiex_rows = []
     ohlc = taiex_ohlc_frame(taiex_rows)
     st.subheader("台指大盤 K 線 · TradingView 風格")
-    kline_html = build_tradingview_kline_html(ohlc)
+    kline_html = build_tradingview_kline_html(ohlc, score_plot)
     if kline_html is None:
         st.info("目前沒有可繪製的 TAIEX OHLC 資料。")
     else:
-        components.html(kline_html, height=560, scrolling=False)
+        components.html(kline_html, height=640, scrolling=False)
         st.caption(
-            "操作：滑鼠滾輪縮放時間範圍；按住滑鼠左鍵左右拖曳平移；右側價格軸會依目前可見 K 線自動調整。"
+            "操作：滑鼠滾輪縮放時間範圍；按住滑鼠左鍵左右拖曳平移；K 線與 Market Score 會同步定位，右側價格軸依目前可見 K 線自動調整。"
         )
-    st.subheader("Market Score 趨勢")
-    score_chart = build_market_score_chart(score_plot)
-    if score_chart is not None:
-        st.altair_chart(score_chart, use_container_width=True)
     if score_plot.empty:
         st.info(
             "目前沒有可繪製的 available Market Score；unavailable 日期不會被當成 0。"

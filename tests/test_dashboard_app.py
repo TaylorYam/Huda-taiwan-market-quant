@@ -7,7 +7,6 @@ from streamlit.testing.v1 import AppTest
 
 from src.dashboard.app import (
     SOURCE_DATASETS,
-    build_market_score_chart,
     build_tradingview_kline_html,
     display_score,
     factor_history_frame,
@@ -282,14 +281,27 @@ def test_tradingview_kline_html_uses_visible_range_auto_scale_and_zoom():
     assert "Market Score" not in html
 
 
-def test_market_score_chart_keeps_independent_zoomable_trend():
-    chart = build_market_score_chart(
-        pd.DataFrame([{"日期": "2026-09-16", "Market Score": 68}])
+def test_tradingview_kline_html_links_market_score_pane():
+    html = build_tradingview_kline_html(
+        pd.DataFrame(
+            [
+                {
+                    "日期": "2026-09-16",
+                    "open": 1,
+                    "high": 3,
+                    "low": 0.5,
+                    "close": 2,
+                },
+            ]
+        ),
+        pd.DataFrame([{"日期": "2026-09-16", "Market Score": 68}]),
     )
-    assert chart is not None
-    spec = chart.to_dict(validate=True)
-    assert spec["params"][0]["bind"] == "scales"
-    assert spec["params"][0]["select"]["encodings"] == ["x", "y"]
+    assert html is not None
+    assert 'id="score-chart"' in html
+    assert "scoreData" in html
+    assert "subscribeVisibleLogicalRangeChange" in html
+    assert "setCrosshairPosition" in html
+    assert "scoreByTime" in html
 
 
 def test_dashboard_renders_history_charts_without_recomputing(monkeypatch):

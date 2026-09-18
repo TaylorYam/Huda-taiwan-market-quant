@@ -1,0 +1,100 @@
+name: TAIFEX rolling-range backfill
+
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "First date, YYYY-MM-DD (the free window currently starts around 2023-09)"
+        required: true
+        type: string
+      end:
+        description: "Last date, YYYY-MM-DD"
+        required: true
+        type: string
+      write:
+        description: "Persist validated VIX and institutional futures rows to Supabase"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: taifex-range-backfill
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    name: Validate and backfill TAIFEX rolling window
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      RANGE_START: ${{ inputs.start }}
+      RANGE_END: ${{ inputs.end }}
+      WRITE_RANGE: ${{ inputs.write }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install HTTP client
+        run: python -m pip install --upgrade requests
+
+      - name: Validate date range
+        shell: bash
+        run: |
+          python - <<'PY'
+          from datetime import date
+          import os
+
+          start = date.fromisoformat(os.environ["RANGE_START"])
+          end = date.fromisoformat(os.environ["RANGE_END"])
+          if start > end:
+              raise SystemExit("RANGE_START must not be after RANGE_END")
+          print(f"Validated TAIFEX range: {start.isoformat()}..{end.isoformat()}")
+          PY
+
+      - name: Verify Supabase secrets for write mode
+        if: ${{ inputs.write == true }}
+        shell: bash
+        run: |
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SECRET_KEY:-}" ]; then
+            echo "::error::SUPABASE_URL or SUPABASE_SECRET_KEY is empty or unavailable."
+            exit 1
+          fi
+          echo "Supabase writer secrets are present (values hidden)."
+
+      - name: Validate VIX range
+        shell: bash
+        run: |
+          args=(--start "$RANGE_START" --end "$RANGE_END")
+          if [ "${WRITE_RANGE:-false}" != "true" ]; then args+=(--dry-run); fi
+          python -m scripts.backfill_taifex_vix_range "${args[@]}"
+
+      - name: Validate institutional futures range
+        shell: bash
+        run: |
+          args=(--start "$RANGE_START" --end "$RANGE_END")
+          if [ "${WRITE_RANGE:-false}" != "true" ]; then args+=(--dry-run); fi
+          python -m scripts.backfill_taifex_institutional_range "${args[@]}"
+
+      - name: Verify Data API after write
+        if: ${{ inputs.write == true }}
+        run: python scripts/check_supabase_api.py
+
+      - name: Record backfill scope
+        shell: bash
+        run: |
+          {
+            echo "### TAIFEX rolling-range backfill"
+            echo "- Range: ${RANGE_START}..${RANGE_END}"
+            echo "- Write mode: ${WRITE_RANGE}"
+            echo "- Sources: Taiwan VIX and TAIFEX foreign TX open interest"
+            echo "- Raw payloads and credentials are not stored in the workflow artifact."
+          } >> "$GITHUB_STEP_SUMMARY"

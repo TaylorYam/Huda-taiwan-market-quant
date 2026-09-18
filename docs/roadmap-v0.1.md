@@ -33,7 +33,7 @@
 先解決會影響資料格式、因子單位或共同回測區間的問題。這些工作不需要付費即可先調查；任何訂閱或歷史資料購買仍須另行決定。
 
 1. **外資現貨來源口徑已完成 v0.1 查證。** 免費 BFI82U／FMTQIK 的可用版本與交易範圍已記錄，`FOREIGN_CASH_VERIFIED_START` 設為 2010-01-01；計算仍要求兩個來源都有完整 5 個交易日窗口，不得以 T86 股數或零值替代。歷史更早的版次差異與來源授權仍保留在文件中。
-2. **補完歷史窗口探測。** PCR 日期表單已完成 292 段全期稽核，回傳 6,090 個唯一日期；仍需用完整交易日曆解釋無資料日。TX 年檔 1998–2025 已完成 28 份全檔稽核；1998 官方交易日曆與 2026 年度檔仍未知。VIX 與法人 OI 已有免費日期查詢端點及一次性回補入口，2026-09 可取得約 2023-09 起的 rolling window；完成實際回補與品質稽核後才能宣告共同起點。詳見[TAIFEX 歷史窗口補查](phase0-taifex-history-v0.1.md)。
+2. **補完歷史窗口探測。** PCR 日期表單已完成 292 段全期稽核，回傳 6,090 個唯一日期；仍需用完整交易日曆解釋無資料日。TX 年檔 1998–2025 已完成 28 份全檔稽核；1998 官方交易日曆與 2026 年度檔仍未知。VIX 與法人 OI 已完成免費 rolling window 回補，並通過 Supabase 覆蓋率報告；共同原始起點目前為 2023-09-18，但 TX 年檔只到 2025-12-31，完整模型仍有 2026 缺口。詳見[TAIFEX 歷史窗口補查](phase0-taifex-history-v0.1.md)。
 3. **定義資料契約及保存方式。** [`data-contract-v0.1.md`](data-contract-v0.1.md) 已建立邏輯欄位、日期時區、單位、契約、盤別、發布時間、來源、修訂與缺值語義；[ADR 0001](adr/0001-phase-1-storage-boundary.md) 已確認 Phase 1 單機開發使用 Git 忽略的 SQLite。免費 MVP 的正式持久來源、傳輸與展示層由 [ADR 0002](adr/0002-free-tier-mvp-stack.md)、[ADR 0003](adr/0003-supabase-data-api-transport.md) 與 [ADR 0004](adr/0004-streamlit-demo-hosting.md) 記錄；正式無人值守每日流程仍須完成備份、還原、權限與配額驗證。
 4. **模型邊界已落入實作與測試。** PCR 百分位方向、Basis 近月／轉倉規則、VIX 歷史窗口、必要因子缺值與 Market Score 區間端點均已在模型規格、評分程式與回測測試中固定；後續只可透過新模型版本調整。
 
@@ -106,7 +106,7 @@
 
 - **已完成文件基礎：** 目標／架構、factor model、data window policy、backtest spec、第一輪 data availability probe。
 - **儲存方案與介面：** 已比較本機 SQLite、CSV／Parquet、Git、Actions artifacts 與外部持久服務；[ADR 0001](adr/0001-phase-1-storage-boundary.md) 已接受 SQLite 作為 Phase 1 本機開發預設，[Issue #12](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/12) 已合併 observation interface 與 schema。[正式持久化決策矩陣](production-persistence-decision-v0.1.md) 已列出驗收條件；[ADR 0002](adr/0002-free-tier-mvp-stack.md)、[ADR 0003](adr/0003-supabase-data-api-transport.md) 與 [ADR 0004](adr/0004-streamlit-demo-hosting.md) 已記錄免費持久化、傳輸與展示路線；[Issue #18](https://github.com/TaylorYam/Huda-taiwan-market-quant/issues/18) 仍追蹤正式維運驗證。
-- **Phase 0 進度：** Issue #5 的 BFI82U／FMTQIK 口徑查證已完成，外資現貨因子可從 2010-01-01 起計算；Issue #7 的 PCR 與 TX 年檔稽核已完成，VIX／法人 OI 日期回補程式已合併。仍待實際回補、完整交易日曆 reconciliation 與足量歷史資料。
+- **Phase 0 進度：** Issue #5 的 BFI82U／FMTQIK 口徑查證已完成，外資現貨因子可從 2010-01-01 起計算；Issue #7 的 PCR 與 TX 年檔稽核已完成，VIX／法人 OI 與免費因子資料已實際回補並通過覆蓋率報告。七個資料源的共同原始起點為 2023-09-18；TX 2026 年檔仍未提供，且三年百分位的最早暖機日為 2026-09-18，因此正式 Layer 1 回測尚未就緒。
 - **程式狀態（2026-09-18 更新）：** 已有 SQLite observation interface、schema、冪等與 revision 測試，TAIEX、VIX、PCR、TX、外資現貨與法人期貨 OI 的官方日級入口與回補工具，以及 Supabase Data API 寫入。8 個核心因子、Market Score、point-in-time 歷史百分位、Layer 1 回測引擎與 Streamlit 唯讀 Dashboard 均已實作；回測仍缺足量真實歷史資料以產出正式辨識力結論。
-- **下一個工作包：** 先完成 #18 的備份／還原、權限分離、配額與來源條款驗證；接著實際執行 VIX／法人 OI 回補並產出共同起點與 Layer 1 真實資料報告。正式無人值守排程在上述 gate 完成前維持停用。
+- **下一個工作包：** 先補上 TX 2026 的官方日級資料並維持每日資料更新；同時完成 #18 的備份／還原、權限分離、配額與來源條款驗證。資料窗口跨過三年百分位暖機、且 forward window 有足夠後續日期後，才產出 Layer 1 真實資料報告。正式無人值守排程在上述 gate 完成前維持停用。
 - **GitHub Issue 狀態：** Issue #5、#12、#14、#24 已完成並關閉；目前開啟的後續項目為 Issue #7、#9 與 #18。#9 的 Phase 1 邊界已由 ADR 0001 接受，正式排程持久化改由 #18 追蹤。Roadmap 其他工作項目仍是草案，不代表已建立 GitHub Issues。

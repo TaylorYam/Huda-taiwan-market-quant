@@ -97,7 +97,7 @@ TAIFEX [交易歷史資料申請頁](https://www.taifex.com.tw/cht/3/hisAppForm)
 
 也嘗試在依日期下載頁送出 2008-04-07 單日查詢，但沒有取得 CSV 下載或可讀的錯誤訊息；因此不把該次嘗試當成對舊日伺服器行為的實測結論。三年窗口與申購路徑的判斷來自該頁明載的官方註記及官方申請頁。
 
-2026-09-17 另以官方 OpenAPI 端點 [`MarketDataOfMajorInstitutionalTradersDetailsOfFuturesContractsBytheDate`](https://openapi.taifex.com.tw/v1/MarketDataOfMajorInstitutionalTradersDetailsOfFuturesContractsBytheDate) 直接實測 JSON。回應是最新快照，沒有日期查詢參數；以 `ContractCode=臺股期貨`、`Item=外資及陸資` 篩選後，2026-09-16 列的 `OpenInterest(Net)` 為 `-76351`。欄位同時提供多空未平倉口數與淨交易量，足以支援每日增量保存及 5 日變化因子。**這個 OpenAPI 端點本身不提供歷史回補，但同日另外實測網頁版 `依日期` 下載表單背後的 `cht/3/futContractsDateDown`（POST，欄位 `queryStartDate`／`queryEndDate`／`commodityId=TXF`）可查到 2023/10/02 的完整資料（外資及陸資淨未平倉 -7,012 口），前端 JS 寫死允許區間為 2023/09/17～2026/09/17，即約 3 年的 rolling window。** 因此三年內的歷史其實可以免費回補，只是要走這個表單端點而非 OpenAPI；正式 collector（`taifex_institutional.py`）目前只實作了 OpenAPI 最新快照的每日增量保存，尚未實作這個表單端點的回補邏輯，屬於待辦而非資料源限制。超出 3 年 rolling window 的資料仍需申請或購買官方歷史檔案。
+2026-09-17 另以官方 OpenAPI 端點 [`MarketDataOfMajorInstitutionalTradersDetailsOfFuturesContractsBytheDate`](https://openapi.taifex.com.tw/v1/MarketDataOfMajorInstitutionalTradersDetailsOfFuturesContractsBytheDate) 直接實測 JSON。回應是最新快照，沒有日期查詢參數；以 `ContractCode=臺股期貨`、`Item=外資及陸資` 篩選後，2026-09-16 列的 `OpenInterest(Net)` 為 `-76351`。欄位同時提供多空未平倉口數與淨交易量，足以支援每日增量保存及 5 日變化因子。**這個 OpenAPI 端點本身不提供歷史回補，但同日另外實測網頁版 `依日期` 下載表單背後的 `cht/3/futContractsDateDown`（POST，欄位 `queryStartDate`／`queryEndDate`／`commodityId=TXF`）可查到 2023/10/02 的完整資料（外資及陸資淨未平倉 -7,012 口），前端 JS 寫死允許區間為 2023/09/17～2026/09/17，即約 3 年的 rolling window。** 三年內的歷史已由 `scripts/backfill_free_factor_range.py` 寫入 Supabase，並在 2026-09-18 覆蓋率報告確認 729 個可用日期（2023-09-18..2026-09-17）；超出 3 年 rolling window 的資料仍需申請或購買官方歷史檔案。
 
 ## Taiwan VIX：免費日收盤窗口與歷史商品需分開
 
@@ -109,13 +109,13 @@ TAIFEX [指數專區](https://www.taifex.com.tw/indes/index.aspx) 明示可查�
 
 TAIFEX [E-Data Shop VIX 新版歷史商品](https://edatashop.taifex.com.tw/zh/product/detail/40283ab7890b3664018924255bf2000f) 頁面列示可申購期間自 2007-01-01 至申購日前一完整月份，月資料，NT$3,000／半年，並有限定使用方式；這是付費產品規格，不是免費歷史窗口，也未在本次購買或取得檔案。免費月檔的日列同時提供 VIX 與收盤前 1 分鐘平均，兩欄應分開保存。
 
-本專案的 `taifex_vix` parser 已處理標頭／分隔線、七欄對齊、日期時間正規化、重複日期與不可用數值；`collect_vix_month` 可透過既有 ObservationStore 寫入日級 observation，GitHub Actions 的 `taifex-vix-daily-ingestion.yml` 只抓當月檔並以重跑去重，走的是 log2data 月檔（近 3～4 個月）。**免費來源其實可以回補約 3 年歷史，但要另外走 `GetStockDayPrices` API，`taifex_vix.py` 目前尚未實作這條路徑**，屬於待辦而非資料源限制；仍到不了三年以上或 2010 年的歷史。
+本專案的 `taifex_vix` parser 已處理標頭／分隔線、七欄對齊、日期時間正規化、重複日期與不可用數值；`collect_vix_month` 可透過既有 ObservationStore 寫入日級 observation，GitHub Actions 的 `taifex-vix-daily-ingestion.yml` 只抓當月檔並以重跑去重，走的是 log2data 月檔（近 3～4 個月）。三年 rolling window 的 `GetStockDayPrices` 回補已由 `scripts/backfill_free_factor_range.py` 接上 Supabase 批次寫入；截至 2026-09-17 已保存 729 個可用日期（2023-09-18..2026-09-17）。免費來源仍到不了三年以上或 2010 年的歷史。
 
 ## 尚待驗證
 
 1. PCR 2001-12-24–2026-09-17 已完成 292 段全期稽核；若要宣稱交易日覆蓋完整，仍需記錄官方交易日曆並解釋每個無資料日的原因。空白日期不能自動當成 PCR=0 或中性訊號。
 2. **1998 年官方交易日曆 reconciliation：2026-09-17 決定 out of scope。** 原因：[`data-window-policy-v0.1.md`](data-window-policy-v0.1.md) 已確認 v0.1 模型的共同起點被 Taiwan VIX、法人期貨 OI 這兩個因子卡在約 2023 年（兩者都有約 3 年 rolling window 的免費回補管道，但共同起點仍取決於這兩個因子回補後的 earliest_date），1998–2001 年的 TX 資料不會被目前模型使用，逐日行事曆 reconciliation 對 v0.1 沒有實質意義。若未來因子必要性設計改變（例如把 VIX／法人期貨 OI 改為可選）而重新納入更長的 TX 歷史，才需要重新評估是否值得尋找 1998 年官方交易日曆。年度 ZIP 本身已完成 1998–2025 全檔解析（維持有效），但 2026 年度檔尚未出現在官方選單，且來源修訂狀態仍未知，這兩項仍是一般性資料維護待辦，與日曆 reconciliation 無關。
-3. **VIX、法人期貨 OI 的 3 年 rolling window 回補：2026-09-17 已確認可行但尚未實作。** `taifex_vix.py`、`taifex_institutional.py` 目前都只走「最新快照」路徑（log2data 月檔、OpenAPI），尚未實作 `GetStockDayPrices`／`futContractsDateDown` 這兩個支援日期查詢的端點。因為是 rolling window，愈晚實作能回補到的歷史愈短（例如 2027 年才做，2023 年的資料會永久超出窗口），建議列為有時效性的實作待辦，而非長期擱置的探測項目。
+3. **VIX、法人期貨 OI 的 3 年 rolling window 回補已完成，需持續維護。** `GetStockDayPrices`／`futContractsDateDown` 已接入一次性免費回補流程，並在 2026-09-18 的 Supabase 覆蓋率報告中各保存 729 個可用日期（2023-09-18..2026-09-17）。因為是 rolling window，後續仍要維持每日更新；愈晚回補能取得的歷史愈短，不能把這段窗口視為固定歷史檔案。
 4. 超出 3 年 rolling window 的歷史（VIX 更早於約 2023 年、法人期貨 OI 更早於約 2023 年）仍需走付費路徑：VIX 已知 E-Data Shop 最早 2007-01-01；法人期貨 OI 的付費歷史商品條件仍未驗證，需先在歷史資料申請頁確認可訂區間、價格、欄位與使用限制，任何申購決定前不把窗口外的資料視為已可得。
 
 ## 官方來源

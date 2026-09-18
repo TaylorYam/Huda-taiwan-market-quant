@@ -154,7 +154,7 @@ Model B：移除限制資料長度的因子，較長歷史
 
 ---
 
-## 目前現況（2026-09-18 更新）：回補端點與程式已具備，正式共同起點待實際回補
+## 目前現況（2026-09-18 更新）：實際回補已完成，正式回測仍未就緒
 
 Taiwan VIX 與法人期貨 OI（外資台指期淨部位、淨部位 5 日變化兩個因子的資料源）已有免費的日期查詢端點：
 
@@ -168,10 +168,27 @@ Taiwan VIX 與法人期貨 OI（外資台指期淨部位、淨部位 5 日變化
 設計的前提下不可達。窗口會持續往前捲動，延後回補會失去較早資料。
 
 一次性回補邏輯已實作於 `fetch_vix_range`／`fetch_institutional_futures_range`，
-對應入口為 `scripts/backfill_taifex_*_range.py`。這些入口會驗證日期範圍、解析欄位、
-保留品質狀態並按觀測日寫入；**程式已具備不等於正式 Supabase 已完成回補**。在實際
-回補並通過品質稽核前，正式資料庫的 `earliest_date` 仍以已保存的可用觀測為準。
-完成回補後，這兩個來源才可把完整模型的共同原始起點推回約 2023 年。
+並由 `scripts/backfill_free_factor_range.py` 將免費來源寫入 Supabase。2026-09-18
+的唯讀覆蓋率報告（GitHub Actions run #2）得到以下可用日期範圍：
+
+| dataset | 可用日期數 | 日期範圍 |
+|---|---:|---|
+| `twse_taiex_daily_v1` | 729 | 2023-09-18..2026-09-17 |
+| `taifex_txo_oi_pcr_v1` | 729 | 2023-09-18..2026-09-17 |
+| `taifex_tx_daily_contract_v1` | 557 | 2023-09-18..2025-12-31 |
+| `taifex_taiwan_vix_close_v1` | 729 | 2023-09-18..2026-09-17 |
+| `taifex_institutional_futures_oi_v1` | 729 | 2023-09-18..2026-09-17 |
+| `twse_foreign_cash_bfi82u_v1` | 728 | 2023-09-18..2026-09-17 |
+| `twse_market_turnover_fmtqik_v1` | 729 | 2023-09-18..2026-09-17 |
+
+因此 `raw_common_start=2023-09-18`。TX 年檔目前只能回補到 2025；2026 年度官方
+年檔尚未提供，這是來源窗口缺口，不是解析失敗。外資現貨有一個交易日缺列，不能
+以零值或中性值補齊，評分時仍須依資料契約標為不可用。
+
+報告同時計算 `earliest_percentile_ready_date=2026-09-18`，且
+`backtest_ready=False (max percentile window 3 years)`。由於目前資料終點是
+2026-09-17，三年百分位暖機尚未留下可宣告的正式訊號日；即使暖機完成，TX 的
+2026 缺口也必須先由官方日級來源或新年檔補齊，才能產生完整八因子結果。
 
 外資現貨因子已通過 BFI82U／FMTQIK 口徑查證，`FOREIGN_CASH_VERIFIED_START` 設為
 2010-01-01；計算仍要求兩個來源都有完整 5 個交易日的可用窗口，不以 T86 或零值
@@ -184,4 +201,7 @@ Taiwan VIX 與法人期貨 OI（外資台指期淨部位、淨部位 5 日變化
 
 第一輪官方資料盤點與 Phase 0 補查分別見 [Data Availability Probe v0.1](data-availability-probe-v0.1.md) 與 [Phase 0 Source Research](phase0-source-research-v0.1.md)。目前已具備 TAIEX、PCR、TX、VIX、法人期貨 OI、BFI82U 與 FMTQIK 的資料入口及品質狀態；來源的可用日期、缺日與回補完整性仍須以保存後的品質報告確認。
 
-下一步和驗收條件已排入 [`roadmap-v0.1.md`](roadmap-v0.1.md) Phase 1–3：先執行 VIX／法人期貨 OI 一次性回補並比對交易日、發布時間與缺值，再計算共同資料起點及正式回測起點；資料量足夠後才執行 `scripts/run_backtest_layer1.py` 產生真實 5／10／20 日報告。不能只因查詢頁顯示近三年，就假定已有足夠的暖機期和後續回測樣本。
+下一步和驗收條件已排入 [`roadmap-v0.1.md`](roadmap-v0.1.md) Phase 1–3：維持每日資料更新，
+補上 TX 2026 的官方日級資料，並在共同起點、暖機期與 forward window 都滿足後，才執行
+`scripts/run_backtest_layer1.py` 產生真實 5／10／20 日報告。不能只因查詢頁顯示近三年，
+就假定已有足夠的暖機期和後續回測樣本。

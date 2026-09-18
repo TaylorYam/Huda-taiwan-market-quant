@@ -166,6 +166,35 @@ def test_supabase_rest_store_writes_market_score_payload() -> None:
     assert post["json"]["calculation_hash"] == "a" * 64
 
 
+def test_supabase_rest_lists_market_score_identities_in_a_date_range() -> None:
+    session = FakeSession()
+
+    with SupabaseRestObservationStore(
+        "https://example.supabase.co",
+        "sb_secret_test",
+        session=session,
+    ) as store:
+        assert (
+            store.list_market_scores(
+                model_version="v0.1",
+                start_date="2026-01-01",
+                end_date="2026-01-31",
+                limit=100,
+            )
+            == []
+        )
+
+    request = session.calls[-1]
+    assert request["url"].endswith("/rest/v1/market_scores")
+    assert request["params"] == {
+        "select": "id,model_version,target_date,calculation_hash",
+        "order": "target_date.asc,id.asc",
+        "limit": "100",
+        "model_version": "eq.v0.1",
+        "target_date": ["gte.2026-01-01", "lte.2026-01-31"],
+    }
+
+
 def _backtest_row(row_id: int, observation_date: str) -> dict[str, Any]:
     return {
         "id": row_id,

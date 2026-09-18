@@ -191,6 +191,46 @@ class SupabaseRestObservationStore:
             result.extend(_observation_from_row(row) for row in rows)
             cursor = ids[-1]
 
+    def list_market_scores(
+        self,
+        *,
+        model_version: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        limit: int = 5000,
+    ) -> list[dict[str, Any]]:
+        """List persisted score identities for an idempotent history replay.
+
+        The backfill writer uses this metadata-only read to preserve any
+        existing result for a target date.  In particular, a historical
+        replay must never create a second row that hides a live score in the
+        dashboard just because the replay has a different calculation hash.
+        """
+
+        if not 1 <= limit <= 10_000:
+            raise ValueError("limit must be between 1 and 10000")
+        if start_date is not None:
+            date.fromisoformat(start_date)
+        if end_date is not None:
+            date.fromisoformat(end_date)
+        if start_date is not None and end_date is not None and start_date > end_date:
+            raise ValueError("start_date must not be after end_date")
+        params: dict[str, Any] = {
+            "select": "id,model_version,target_date,calculation_hash",
+            "order": "target_date.asc,id.asc",
+            "limit": str(limit),
+        }
+        if model_version is not None:
+            if not model_version.strip():
+                raise ValueError("model_version must not be empty")
+            params["model_version"] = f"eq.{model_version}"
+        if start_date is not None:
+            params["target_date"] = [f"gte.{start_date}"]
+        if end_date is not None:
+            existing = params.get("target_date", [])
+            params["target_date"] = [*existing, f"lte.{end_date}"]
+        return self._request("GET", "/market_scores", params=params)
+
     def write_market_score(self, record: Mapping[str, Any]) -> MarketScoreWriteResult:
         """Insert one derived result or return duplicate for the same hash."""
 

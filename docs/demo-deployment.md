@@ -6,6 +6,13 @@
 目前 `main` 已包含 `streamlit_app.py`、唯讀 Dashboard 與 Demo readiness smoke；本文件提供部署設定與驗收程序，不宣稱網站已上線。
 不以空白 placeholder 頁面冒充 Dashboard。本文件不授權生產部署或付費資源。
 
+## 實際展示驗收（2026-09-18）
+
+- 公開網址：[Huda｜台指大盤](https://huda-taiwan-market-quant-5f2taszopumzppuwyult9c.streamlit.app/)
+- 部署來源：`TaylorYam/Huda-taiwan-market-quant` 的 `main`，驗收 commit `a31420a`
+- 未登入瀏覽器可載入頁面標題、唯讀展示標示與來源資料品質表；Supabase 連線設定已由 Streamlit Secrets 提供，頁面未出現連線錯誤。
+- 目前 `market_scores` 尚無資料，因此頁面顯示「尚無 Market Score」；這是刻意保留的展示狀態，評分寫入與每日流程排在展示版驗收之後。
+
 ## 部署設定
 
 | 欄位 | 設定 |

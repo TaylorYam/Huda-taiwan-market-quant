@@ -269,11 +269,24 @@ def render_history_charts(store: DashboardDataStore) -> None:
     if factor_plot.empty:
         st.info("目前沒有可繪製的 available 因子分數；缺值不會被當成 0。")
     else:
-        st.line_chart(
-            factor_plot.set_index("日期")[factor_columns],
-            y_label="因子分數",
-            height=360,
-        )
+        factor_tabs = st.tabs(factor_columns)
+        indexed_factor_plot = factor_plot.set_index("日期")
+        for factor_id, factor_label, factor_tab in zip(
+            FACTOR_LABELS, factor_columns, factor_tabs, strict=True
+        ):
+            with factor_tab:
+                factor_series = indexed_factor_plot[factor_label]
+                available = factor_series.dropna()
+                category = FACTOR_CATEGORIES.get(factor_id, "其他")
+                st.caption(f"{category} · {len(available)} 筆 available")
+                if available.empty:
+                    st.info("目前沒有可繪製的 available 分數；缺值不會被當成 0。")
+                else:
+                    st.line_chart(
+                        factor_series,
+                        y_label="因子分數",
+                        height=300,
+                    )
 
 
 def render_score(record: dict | None) -> None:

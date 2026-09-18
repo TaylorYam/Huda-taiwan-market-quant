@@ -16,7 +16,7 @@
 - 偏空
 - 強空
 
-第一版網站應讓主管快速看到：
+第一版網站應快速看到：
 
 - 今日台指方向
 - Market Score（0–100）
@@ -107,7 +107,7 @@ Streamlit Community Cloud：唯讀 Dashboard
 
 ## 目前階段
 
-- [x] 定義主管需求與系統目標
+- [x] 定義需求與系統目標
 - [x] 確認第一版以免費官方資料為主
 - [x] 定義 Market Direction Model v0.1
 - [x] 定義 8 個核心因子與初始權重

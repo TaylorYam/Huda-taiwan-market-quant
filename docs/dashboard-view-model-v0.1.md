@@ -10,3 +10,18 @@ is unavailable, then display each factor's `reason` so missing source data is
 visible. A future Streamlit or Vercel handler can serialize
 `DashboardSnapshot.as_dict()` without coupling the UI to SQLite, Supabase, or
 the factor implementation.
+
+## Streamlit trend views
+
+The deployed Streamlit renderer also reads persisted history through the
+read-only `DashboardDataStore` adapter:
+
+- Market Score history is plotted only for rows with `status=available` and a
+  finite score in the 0–100 range. Unavailable dates remain visible as status
+  metadata and are never converted to zero.
+- `twse_taiex_daily_v1` observations provide the TAIEX OHLC data for the
+  candlestick view. Rows with non-available quality or incomplete OHLC are
+  excluded from the plot and reported as unavailable.
+- Factor trend lines come from the persisted `factor_scores_json` envelope.
+  Each factor cell is missing unless its own status is `available` and its
+  score is valid; the dashboard does not recalculate factors in the renderer.

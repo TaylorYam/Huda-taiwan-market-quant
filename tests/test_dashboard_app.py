@@ -1,10 +1,18 @@
 from copy import deepcopy
 from unittest.mock import MagicMock, patch
 
+import pandas as pd
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from src.dashboard.app import SOURCE_DATASETS, display_score, factor_rows
+from src.dashboard.app import (
+    SOURCE_DATASETS,
+    display_score,
+    factor_history_frame,
+    factor_rows,
+    score_history_frame,
+    taiex_ohlc_frame,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -13,13 +21,22 @@ def clean_env(monkeypatch):
     monkeypatch.delenv("SUPABASE_SECRET_KEY", raising=False)
 
 
-def run_app(monkeypatch, record=None, error=None, source=None):
+def run_app(
+    monkeypatch,
+    record=None,
+    error=None,
+    source=None,
+    score_history=None,
+    taiex_history=None,
+):
     monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
     monkeypatch.setenv("SUPABASE_SECRET_KEY", "sb_secret_never_render_this")
     store = MagicMock()
     store.__enter__.return_value = store
     store.get_latest_market_score.return_value = record
     store.get_latest_source_quality.return_value = source
+    store.get_market_score_history.return_value = score_history or []
+    store.get_observation_history.return_value = taiex_history or []
     if error:
         store.get_latest_market_score.side_effect = error
     with patch("src.dashboard.app.DashboardDataStore", return_value=store):
@@ -171,6 +188,109 @@ def test_malformed_source_timestamp_does_not_hide_quality_table(monkeypatch):
     )
     assert len(app.dataframe) == 1
     assert app.dataframe[0].value.iloc[0]["最後擷取時間"] == "格式錯誤"
+
+
+def test_score_history_does_not_turn_unavailable_into_zero():
+    frame = score_history_frame(
+        [
+            {"target_date": "2026-09-16", "status": "available", "score": 68},
+            {"target_date": "2026-09-17", "status": "unavailable", "score": None},
+        ]
+    )
+    assert frame.loc[0, "Market Score"] == 68.0
+    assert pd.isna(frame.loc[1, "Market Score"])
+    assert frame["狀態"].tolist() == ["available", "unavailable"]
+
+
+def test_taiex_ohlc_frame_keeps_only_complete_available_rows():
+    frame = taiex_ohlc_frame(
+        [
+            {
+                "id": 1,
+                "observation_date": "2026-09-16",
+                "quality_status": "available",
+                "values_json": {"open": 1, "high": 3, "low": 0.5, "close": 2},
+            },
+            {
+                "id": 2,
+                "observation_date": "2026-09-17",
+                "quality_status": "invalid",
+                "values_json": {"open": 2, "high": 4, "low": 1, "close": 3},
+            },
+            {
+                "id": 3,
+                "observation_date": "2026-09-18",
+                "quality_status": "available",
+                "values_json": {"open": 2, "high": 4, "low": 1},
+            },
+        ]
+    )
+    assert frame["日期"].tolist() == ["2026-09-16"]
+    assert frame[["open", "high", "low", "close"]].iloc[0].tolist() == [
+        1.0,
+        3.0,
+        0.5,
+        2.0,
+    ]
+
+
+def test_factor_history_leaves_unavailable_factor_cells_missing():
+    frame = factor_history_frame(
+        [
+            {
+                "target_date": "2026-09-17",
+                "factor_scores_json": {
+                    "taiex_ma20_ma60_trend": {
+                        "status": "available",
+                        "score": 75,
+                    },
+                    "taiex_20d_momentum": {
+                        "status": "unavailable",
+                        "score": None,
+                    },
+                },
+            }
+        ]
+    )
+    assert frame.loc[0, "TAIEX 均線趨勢"] == 75
+    assert pd.isna(frame.loc[0, "TAIEX 20 日動能"])
+
+
+def test_dashboard_renders_history_charts_without_recomputing(monkeypatch):
+    score_history = [
+        {
+            "target_date": "2026-09-16",
+            "status": "available",
+            "score": 68,
+            "factor_scores_json": {
+                "taiex_ma20_ma60_trend": {"status": "available", "score": 75}
+            },
+        },
+        {
+            "target_date": "2026-09-17",
+            "status": "unavailable",
+            "score": None,
+            "factor_scores_json": {},
+        },
+    ]
+    taiex_history = [
+        {
+            "observation_date": "2026-09-16",
+            "quality_status": "available",
+            "values_json": {"open": 1, "high": 3, "low": 0.5, "close": 2},
+        }
+    ]
+    app, store = run_app(
+        monkeypatch,
+        score_history=score_history,
+        taiex_history=taiex_history,
+    )
+    assert not app.exception
+    assert any("歷史趨勢" in header.value for header in app.header)
+    assert store.get_market_score_history.call_count == 2
+    store.get_observation_history.assert_called_once_with(
+        "twse_taiex_daily_v1", limit=1000
+    )
 
 
 def test_source_api_error_keeps_other_source_rows_visible(monkeypatch):

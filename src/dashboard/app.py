@@ -8,6 +8,8 @@ from datetime import datetime
 from math import isfinite
 from urllib.parse import urlsplit
 
+import altair as alt
+import pandas as pd
 import streamlit as st
 from requests.exceptions import RequestException
 
@@ -23,6 +25,9 @@ SOURCE_DATASETS = {
     "taifex_txo_oi_pcr_v1": "TAIFEX OI PCR",
     "taifex_taiwan_vix_close_v1": "TAIFEX Taiwan VIX",
 }
+
+TAIEX_DATASET_ID = "twse_taiex_daily_v1"
+CHART_LIMIT = 1000
 
 READ_ERRORS = (
     RequestException,
@@ -82,6 +87,193 @@ def factor_rows(record: Mapping[str, object]) -> list[dict]:
             }
         )
     return rows
+
+
+def _as_rows(value: object) -> list[Mapping[str, object]]:
+    """Accept only list-like API payloads; malformed payloads become empty."""
+
+    if not isinstance(value, list):
+        return []
+    return [row for row in value if isinstance(row, Mapping)]
+
+
+def _finite_number(
+    value: object, *, minimum: float | None = None, maximum: float | None = None
+) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not isfinite(number):
+        return None
+    if minimum is not None and number < minimum:
+        return None
+    if maximum is not None and number > maximum:
+        return None
+    return number
+
+
+def _latest_rows_by_date(
+    rows: list[Mapping[str, object]],
+) -> list[Mapping[str, object]]:
+    """Keep the last persisted revision for a date, preserving missing dates."""
+
+    latest: dict[str, Mapping[str, object]] = {}
+    for row in rows:
+        date_text = row.get("observation_date") or row.get("target_date")
+        if isinstance(date_text, str) and date_text:
+            latest[date_text] = row
+    return [latest[key] for key in sorted(latest)]
+
+
+def score_history_frame(rows: object) -> pd.DataFrame:
+    """Build a score history with unavailable dates represented as missing."""
+
+    output: list[dict[str, object]] = []
+    latest: dict[str, Mapping[str, object]] = {}
+    for row in _as_rows(rows):
+        target = row.get("target_date")
+        if isinstance(target, str) and target:
+            latest[target] = row
+    for target in sorted(latest):
+        row = latest[target]
+        status = row.get("status")
+        score = (
+            _finite_number(row.get("score"), minimum=0, maximum=100)
+            if status == "available"
+            else None
+        )
+        output.append(
+            {"日期": target, "Market Score": score, "狀態": status or "unavailable"}
+        )
+    return pd.DataFrame(output, columns=["日期", "Market Score", "狀態"])
+
+
+def taiex_ohlc_frame(rows: object) -> pd.DataFrame:
+    """Build TAIEX OHLC rows; incomplete or non-available rows are omitted."""
+
+    output: list[dict[str, object]] = []
+    for row in _latest_rows_by_date(_as_rows(rows)):
+        if row.get("quality_status") != "available":
+            continue
+        values = row.get("values_json")
+        if not isinstance(values, Mapping):
+            continue
+        numbers = {
+            field: _finite_number(values.get(field), minimum=0)
+            for field in ("open", "high", "low", "close")
+        }
+        if any(value is None for value in numbers.values()):
+            continue
+        output.append({"日期": row["observation_date"], **numbers})
+    return pd.DataFrame(output, columns=["日期", "open", "high", "low", "close"])
+
+
+def factor_history_frame(rows: object) -> pd.DataFrame:
+    """Build one column per factor, leaving unavailable scores as missing."""
+
+    latest: dict[str, Mapping[str, object]] = {}
+    for row in _as_rows(rows):
+        target = row.get("target_date")
+        if isinstance(target, str) and target:
+            latest[target] = row
+    output: list[dict[str, object]] = []
+    for target in sorted(latest):
+        row = latest[target]
+        raw_factors = row.get("factor_scores_json")
+        factors = raw_factors if isinstance(raw_factors, Mapping) else {}
+        item: dict[str, object] = {"日期": target}
+        for factor_id, label in FACTOR_LABELS.items():
+            factor = factors.get(factor_id)
+            if isinstance(factor, Mapping) and factor.get("status") == "available":
+                item[label] = _finite_number(
+                    factor.get("score"), minimum=0, maximum=100
+                )
+            else:
+                item[label] = None
+        output.append(item)
+    return pd.DataFrame(output, columns=["日期", *FACTOR_LABELS.values()])
+
+
+def render_history_charts(store: DashboardDataStore) -> None:
+    """Render read-only trend views from persisted rows only."""
+
+    st.header("歷史趨勢")
+    try:
+        score_rows = store.get_market_score_history(limit=CHART_LIMIT)
+    except READ_ERRORS:
+        st.warning("無法讀取 Market Score 歷史，暫不顯示評分趨勢圖。")
+        score_rows = []
+    score_frame = score_history_frame(score_rows)
+    score_plot = score_frame.dropna(subset=["Market Score"])
+    st.subheader("Market Score 趨勢")
+    if score_plot.empty:
+        st.info(
+            "目前沒有可繪製的 available Market Score；unavailable 日期不會被當成 0。"
+        )
+    else:
+        st.line_chart(
+            score_plot.set_index("日期")["Market Score"], y_label="分數", height=240
+        )
+    if not score_frame.empty and score_frame["狀態"].ne("available").any():
+        st.caption("部分評分日期為 unavailable，已保留狀態但未繪入數值線。")
+
+    try:
+        taiex_rows = store.get_observation_history(TAIEX_DATASET_ID, limit=CHART_LIMIT)
+    except READ_ERRORS:
+        st.warning("無法讀取 TAIEX 歷史，暫不顯示 K 線圖。")
+        taiex_rows = []
+    ohlc = taiex_ohlc_frame(taiex_rows)
+    st.subheader("台指大盤 K 線")
+    if ohlc.empty:
+        st.info("目前沒有完整的 TAIEX OHLC 資料可繪圖。")
+    else:
+        chart_data = ohlc.copy()
+        chart_data["日期"] = pd.to_datetime(chart_data["日期"])
+        base = alt.Chart(chart_data).encode(
+            x=alt.X("日期:T", title="日期"),
+            tooltip=[
+                alt.Tooltip("日期:T", title="日期"),
+                alt.Tooltip("open:Q", title="開盤", format=",.2f"),
+                alt.Tooltip("high:Q", title="最高", format=",.2f"),
+                alt.Tooltip("low:Q", title="最低", format=",.2f"),
+                alt.Tooltip("close:Q", title="收盤", format=",.2f"),
+            ],
+        )
+        wick = base.mark_rule().encode(y=alt.Y("low:Q", title="指數"), y2="high:Q")
+        body = base.mark_bar(size=7).encode(
+            y="open:Q",
+            y2="close:Q",
+            color=alt.condition(
+                alt.datum.close >= alt.datum.open,
+                alt.value("#d84a4a"),
+                alt.value("#2f8f67"),
+            ),
+        )
+        st.altair_chart((wick + body).properties(height=320), use_container_width=True)
+    if len(ohlc) < len(_latest_rows_by_date(_as_rows(taiex_rows))):
+        st.caption("部分日期缺少完整 OHLC 或品質不可用，已從 K 線排除。")
+
+    try:
+        factor_rows_history = store.get_market_score_history(limit=CHART_LIMIT)
+    except READ_ERRORS:
+        factor_rows_history = []
+    factor_frame = factor_history_frame(factor_rows_history)
+    st.subheader("各因子分數趨勢")
+    factor_columns = [column for column in factor_frame.columns if column != "日期"]
+    factor_plot = (
+        factor_frame.dropna(subset=factor_columns, how="all")
+        if factor_columns
+        else pd.DataFrame()
+    )
+    if factor_plot.empty:
+        st.info("目前沒有可繪製的 available 因子分數；缺值不會被當成 0。")
+    else:
+        st.line_chart(
+            factor_plot.set_index("日期")[factor_columns],
+            y_label="因子分數",
+            height=360,
+        )
 
 
 def render_score(record: dict | None) -> None:
@@ -211,6 +403,10 @@ def main() -> None:
                 st.error(
                     "無法讀取 Market Score。請維護者確認 market_scores 表、Data API 權限與網路連線。"
                 )
+            try:
+                render_history_charts(store)
+            except READ_ERRORS:
+                st.warning("歷史趨勢暫時無法顯示；最新分數與來源狀態仍可查看。")
             try:
                 render_sources(store)
             except READ_ERRORS:

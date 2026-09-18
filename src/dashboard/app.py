@@ -214,9 +214,7 @@ def build_interactive_market_chart(
                 alt.Tooltip("close:Q", title="收盤", format=",.2f"),
             ],
         )
-        wick = base.mark_rule().encode(
-            y=alt.Y("low:Q", title="指數"), y2="high:Q"
-        )
+        wick = base.mark_rule().encode(y=alt.Y("low:Q", title="指數"), y2="high:Q")
         body = base.mark_bar(size=7).encode(
             y="open:Q",
             y2="close:Q",
@@ -240,7 +238,9 @@ def build_interactive_market_chart(
             .mark_line(point=True)
             .encode(
                 x=alt.X("日期:T", title="日期"),
-                y=alt.Y("Market Score:Q", title="分數", scale=alt.Scale(domain=[0, 100])),
+                y=alt.Y(
+                    "Market Score:Q", title="分數", scale=alt.Scale(domain=[0, 100])
+                ),
                 tooltip=[
                     alt.Tooltip("日期:T", title="日期"),
                     alt.Tooltip("Market Score:Q", title="Market Score", format=",.2f"),

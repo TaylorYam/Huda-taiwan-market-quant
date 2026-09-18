@@ -175,20 +175,21 @@ Taiwan VIX 與法人期貨 OI（外資台指期淨部位、淨部位 5 日變化
 |---|---:|---|
 | `twse_taiex_daily_v1` | 729 | 2023-09-18..2026-09-17 |
 | `taifex_txo_oi_pcr_v1` | 729 | 2023-09-18..2026-09-17 |
-| `taifex_tx_daily_contract_v1` | 557 | 2023-09-18..2025-12-31 |
+| `taifex_tx_daily_contract_v1` | 729 | 2023-09-18..2026-09-17 |
 | `taifex_taiwan_vix_close_v1` | 729 | 2023-09-18..2026-09-17 |
 | `taifex_institutional_futures_oi_v1` | 729 | 2023-09-18..2026-09-17 |
 | `twse_foreign_cash_bfi82u_v1` | 728 | 2023-09-18..2026-09-17 |
 | `twse_market_turnover_fmtqik_v1` | 729 | 2023-09-18..2026-09-17 |
 
-因此 `raw_common_start=2023-09-18`。TX 年檔目前只能回補到 2025；2026 年度官方
-年檔尚未提供，這是來源窗口缺口，不是解析失敗。外資現貨有一個交易日缺列，不能
-以零值或中性值補齊，評分時仍須依資料契約標為不可用。
+因此 `raw_common_start=2023-09-18`。TX 年檔目前仍只列到 2025；2026 年度年檔尚未
+提供，但已由官方日期查詢頁補齊 2026-01-01..2026-09-17 的 172 個交易日，覆蓋率報告
+確認 TX 已與共同窗口對齊。外資現貨有一個交易日缺列，不能以零值或中性值補齊，評分
+時仍須依資料契約標為不可用。
 
 報告同時計算 `earliest_percentile_ready_date=2026-09-18`，且
 `backtest_ready=False (max percentile window 3 years)`。由於目前資料終點是
-2026-09-17，三年百分位暖機尚未留下可宣告的正式訊號日；即使暖機完成，TX 的
-2026 缺口也必須先由官方日級來源或新年檔補齊，才能產生完整八因子結果。
+2026-09-17，三年百分位暖機尚未留下可宣告的正式訊號日；TX 的 2026 缺口已由官方
+日級來源補齊，後續只需維持每日增量更新。
 
 外資現貨因子已通過 BFI82U／FMTQIK 口徑查證，`FOREIGN_CASH_VERIFIED_START` 設為
 2010-01-01；計算仍要求兩個來源都有完整 5 個交易日的可用窗口，不以 T86 或零值
@@ -202,6 +203,6 @@ Taiwan VIX 與法人期貨 OI（外資台指期淨部位、淨部位 5 日變化
 第一輪官方資料盤點與 Phase 0 補查分別見 [Data Availability Probe v0.1](data-availability-probe-v0.1.md) 與 [Phase 0 Source Research](phase0-source-research-v0.1.md)。目前已具備 TAIEX、PCR、TX、VIX、法人期貨 OI、BFI82U 與 FMTQIK 的資料入口及品質狀態；來源的可用日期、缺日與回補完整性仍須以保存後的品質報告確認。
 
 下一步和驗收條件已排入 [`roadmap-v0.1.md`](roadmap-v0.1.md) Phase 1–3：維持每日資料更新，
-補上 TX 2026 的官方日級資料，並在共同起點、暖機期與 forward window 都滿足後，才執行
+維持 TX 官方日級資料的每日增量更新，並在共同起點、暖機期與 forward window 都滿足後，才執行
 `scripts/run_backtest_layer1.py` 產生真實 5／10／20 日報告。不能只因查詢頁顯示近三年，
 就假定已有足夠的暖機期和後續回測樣本。

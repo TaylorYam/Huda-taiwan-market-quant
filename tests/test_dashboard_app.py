@@ -302,6 +302,8 @@ def test_tradingview_kline_html_links_market_score_pane():
     assert html is not None
     assert 'id="score-chart"' in html
     assert "scoreData" in html
+    assert "alignedScoreData = candleData.map" in html
+    assert "scoreSeries.setData(alignedScoreData)" in html
     assert "subscribeVisibleLogicalRangeChange" in html
     assert "setCrosshairPosition" in html
     assert "scoreByTime" in html

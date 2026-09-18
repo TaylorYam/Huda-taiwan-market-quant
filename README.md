@@ -78,10 +78,10 @@ GitHub Actions：每日收集與寫入
         ↓
 Supabase Free PostgreSQL + Data API：持久化觀察與分數
         ↓
-Vercel Hobby：Dashboard 與唯讀 API
+Streamlit Community Cloud：唯讀 Dashboard
 ```
 
-本機開發仍使用被 Git 忽略的 SQLite。GitHub Actions 透過 Supabase Data API 寫入，不需要資料庫密碼；`SUPABASE_URL` 與 `SUPABASE_SECRET_KEY` 只放在 GitHub Secrets。Supabase Free 沒有託管自動備份或 PITR，Vercel Hobby 的每日 Cron 也不是精準排程器；完整限制、備份要求與升級條件見 [`docs/adr/0002-free-tier-mvp-stack.md`](docs/adr/0002-free-tier-mvp-stack.md) 與 [`docs/adr/0003-supabase-data-api-transport.md`](docs/adr/0003-supabase-data-api-transport.md)。
+本機開發仍使用被 Git 忽略的 SQLite。GitHub Actions 透過 Supabase Data API 寫入，不需要資料庫密碼；`SUPABASE_URL` 與 `SUPABASE_SECRET_KEY` 只放在 GitHub Secrets。Supabase Free 沒有託管自動備份或 PITR，Streamlit Community Cloud 也不提供本專案要求的可用性保證；完整限制、備份要求與升級條件見 [`docs/adr/0002-free-tier-mvp-stack.md`](docs/adr/0002-free-tier-mvp-stack.md)、[`docs/adr/0003-supabase-data-api-transport.md`](docs/adr/0003-supabase-data-api-transport.md) 與 [`docs/adr/0004-streamlit-demo-hosting.md`](docs/adr/0004-streamlit-demo-hosting.md)。
 
 若啟用 Supabase GitHub integration，標準 migration 位置為 [`supabase/migrations/`](supabase/migrations/)，專案設定在 [`supabase/config.toml`](supabase/config.toml)，working directory 使用 repository root（`.`）。推送或合併到 production branch 後，integration 可依 migration 檔部署 schema；目前的 Data API writer 仍由 GitHub Actions 負責。
 
@@ -103,7 +103,7 @@ Vercel Hobby：Dashboard 與唯讀 API
 
 詳細定義與初始評分規則請見 [`docs/factor-spec.md`](docs/factor-spec.md) 及其連結的版本化模型文件。
 
-各文件中尚未實作的資料、評分、回測與 Dashboard 方向，已整併為 [`docs/roadmap-v0.1.md`](docs/roadmap-v0.1.md)，包含依賴順序、驗收條件與 GitHub Issue 草案。
+各文件中尚未完成的資料驗收、回測與維運方向，已整併為 [`docs/roadmap-v0.1.md`](docs/roadmap-v0.1.md)，包含依賴順序、驗收條件與 GitHub Issue 草案。
 
 ## 目前階段
 
@@ -116,11 +116,11 @@ Vercel Hobby：Dashboard 與唯讀 API
 - [x] 補查免費 BFI82U 現貨金額及 FMTQIK 成交金額資料來源；建立資料契約草案
 - [ ] 核對現貨金額分子／分母的版次、交易範圍與歷史缺口（Roadmap Phase 0）
 - [x] 確認 Phase 1 使用 Git 忽略的 SQLite observation store；免費 MVP 持久來源已由 ADR 0002 選定
-- [x] 選定免費 MVP 堆疊：GitHub Actions + Supabase Free PostgreSQL Data API + Vercel Hobby
-- [ ] 建立官方資料收集與品質檢查（Phase 1）
-- [ ] 實作 8 個因子與 Market Score（Phase 2）
-- [ ] 驗證分數辨識力；通過後才做策略層回測（Phase 3）
-- [ ] 建立 Dashboard、CI 與每日資料流程（Phase 4）
+- [x] 選定免費 MVP 堆疊：GitHub Actions + Supabase Free PostgreSQL Data API + Streamlit Community Cloud
+- [x] 建立官方資料收集、品質檢查與可重跑的持久化介面（Phase 1；正式資料庫驗收仍待完成）
+- [x] 實作 8 個因子與 Market Score（Phase 2；缺必要資料時明確標示 unavailable）
+- [ ] 用真實歷史資料驗證分數辨識力；通過後才做策略層回測（Phase 3）
+- [x] 建立唯讀 Dashboard、CI 與每日／手動資料流程（Phase 4；外部部署與正式維運閘門仍待完成）
 
 ## 專案結構
 
@@ -150,18 +150,21 @@ Vercel Hobby：Dashboard 與唯讀 API
 │   ├── data/
 │   ├── factors/
 │   ├── scoring/
+│   ├── backtest/
 │   └── dashboard/
+├── scripts/
 ├── tests/
 └── .github/
     ├── ISSUE_TEMPLATE/
     └── pull_request_template.md
 ```
 
-## Streamlit 唯讀 Dashboard MVP
+## Streamlit 唯讀 Dashboard MVP（已合併）
 
 此展示入口供主管快速查看最新已儲存結果及維護者檢查來源品質；
 使用 Streamlit Python 伺服器呼叫 Supabase Data API，不在頁面重算分數。
-這是可本機啟動的展示方案，正式網站部署方向仍見 ADR 0002。
+`streamlit_app.py` 已在 main，入口可本機啟動；公開展示採 Streamlit Community Cloud，
+外部部署與資料／權限驗收仍見 [公開展示部署 runbook](docs/demo-deployment.md)。
 
 在 repository 根目錄執行（Python 3.12+）：
 
@@ -183,9 +186,10 @@ python -m streamlit run streamlit_app.py
   最新結果若 unavailable，不退回較舊的 available 分數。
 - 顯示分類／因子列、target、as-of、模型、分數寫入時間與 unavailable 原因。
   現有持久化格式沒有因子原始值／分類總分，因此不自行推算。
-- 來源區列出五個已實作來源各自最近擷取的一筆紀錄、品質狀態與擷取時間。
+- 來源區列出七個已實作來源各自最近擷取的一筆紀錄、品質狀態與擷取時間。
   這是來源更新概況，並非分數的 as-of 證據或全部資料品質摘要；
-  未持久化的失敗擷取無法由此得知。外資現貨來源契約仍未完成。
+  未持久化的失敗擷取無法由此得知。外資現貨分子與市場成交金額分母分開列示，
+  正式資料完整性與歷史窗口仍須驗收。
 - 頁面載入或按「重新整理」時讀取最新資料，無跨使用者的憑證快取。
   `available` 不是新鮮度保證，請核對 target、as-of 與各來源日期。
 
@@ -212,7 +216,7 @@ python -m ruff format --check src tests streamlit_app.py
 
 ## 公開展示部署路線
 
-目前 main 尚未提供 Streamlit 可執行頁面；Dashboard 入口合併後，最快免費展示方案改採
-Streamlit Community Cloud。Vercel 路線保留為未來前端／API 重構選項。
-完整部署欄位、環境變數邊界、smoke check 與 PR #46 合併後 Supabase integration 驗收見
+目前 main 已提供 Streamlit 可執行頁面；最快免費展示方案採 Streamlit Community Cloud，
+Vercel 路線保留為未來前端／API 重構選項。完整部署欄位、環境變數邊界、smoke check
+與 PR #46 合併後 Supabase integration 驗收見
 [公開展示部署 runbook](docs/demo-deployment.md) 與 [ADR 0004](docs/adr/0004-streamlit-demo-hosting.md)。

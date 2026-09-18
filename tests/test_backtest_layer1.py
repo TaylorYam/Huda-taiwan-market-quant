@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from datetime import date, timedelta
 
@@ -15,10 +16,11 @@ from src.backtest.layer1 import (
     build_score_series,
     compute_forward_returns,
     format_report,
+    forward_data_end_date,
     run_layer1_backtest,
     summarize_buckets,
 )
-from src.factors.contracts import FACTOR_AVAILABLE, TAIEX_DATASET_ID
+from src.factors.contracts import FACTOR_AVAILABLE, PCR_FACTOR_ID, TAIEX_DATASET_ID
 from src.scoring.contracts import BEAR, BULL, NEUTRAL, STRONG_BEAR, STRONG_BULL
 
 BUCKET_ORDER = (STRONG_BEAR, BEAR, NEUTRAL, BULL, STRONG_BULL)
@@ -80,6 +82,20 @@ def test_forward_returns_use_trading_day_offsets_present_in_the_series() -> None
     assert last_day == {1: None, 2: None, 5: None}
 
 
+def test_forward_data_end_date_pads_the_loader_beyond_the_signal_period() -> None:
+    end = date(2026, 9, 17)
+    assert forward_data_end_date(end) == date(2027, 2, 4)
+    assert forward_data_end_date(end, horizons=(1, 3)) == date(2026, 10, 8)
+
+
+def test_forward_returns_reject_invalid_horizons() -> None:
+    taiex = [
+        _observation(TAIEX_DATASET_ID, date(2026, 1, 5), {"close": 100.0}, "TAIEX")
+    ]
+    with pytest.raises(ValueError, match="positive integers"):
+        compute_forward_returns(taiex, horizons=(0,))
+
+
 def test_forward_returns_pick_the_latest_revision_per_date() -> None:
     day = date(2026, 1, 5)
     stale = _observation(TAIEX_DATASET_ID, day, {"close": 999.0}, "TAIEX")
@@ -96,6 +112,46 @@ def test_forward_returns_pick_the_latest_revision_per_date() -> None:
     assert forward[day][1] == pytest.approx(110.0 / 100.0 - 1)
 
 
+def test_score_replay_excludes_a_revision_published_after_the_signal_date() -> None:
+    taiex, pcr, tx, institutional = _dense_fixtures(END, span_days=100)
+    target = END - timedelta(days=10)
+    original = next(row for row in pcr if row.observation_date == target.isoformat())
+    revised = replace(
+        original,
+        values={"put_oi": 9_999.0, "call_oi": 1.0},
+        published_at=f"{(target + timedelta(days=1)).isoformat()}T00:00:00+00:00",
+        source_revision="late-revision",
+    )
+    pcr = [*pcr, revised]
+    vix = [
+        _observation(
+            "taifex_taiwan_vix_close_v1",
+            END - timedelta(days=offset),
+            {"close": 15 + offset * 0.01},
+            "VIX",
+        )
+        for offset in range(100, -1, -1)
+    ]
+
+    result = next(
+        row
+        for row in build_score_series(
+            taiex_observations=taiex,
+            pcr_observations=pcr,
+            tx_observations=tx,
+            vix_observations=vix,
+            institutional_observations=institutional,
+            start_date=target,
+            end_date=target,
+        )
+        if row.target_date == target.isoformat()
+    )
+
+    assert result.factor_inputs[PCR_FACTOR_ID].value == pytest.approx(
+        original.values["put_oi"] / original.values["call_oi"]
+    )
+
+
 def test_forward_returns_ignore_non_taiex_and_unavailable_rows() -> None:
     day = date(2026, 1, 5)
     other_dataset = replace(
@@ -110,6 +166,43 @@ def test_forward_returns_ignore_non_taiex_and_unavailable_rows() -> None:
     forward = compute_forward_returns([other_dataset, bad_quality], horizons=(1,))
 
     assert forward == {}
+
+
+def test_forward_returns_accept_mapping_rows_and_skip_malformed_data() -> None:
+    rows = [
+        {
+            "dataset_id": TAIEX_DATASET_ID,
+            "observation_date": "2026-01-05T00:00:00+00:00",
+            "quality_status": "available",
+            "values": {"close": 100.0},
+        },
+        {
+            "dataset_id": TAIEX_DATASET_ID,
+            "observation_date": "2026-01-06",
+            "quality_status": "available",
+            "values": {"close": 110.0},
+        },
+        # Missing values/date fields must not make an otherwise usable series
+        # fail at the backtest boundary.
+        {"dataset_id": TAIEX_DATASET_ID, "quality_status": "available"},
+    ]
+
+    forward = compute_forward_returns(rows, horizons=(1,))
+
+    assert forward[date(2026, 1, 5)][1] == pytest.approx(0.10)
+    assert date(2026, 1, 6) in forward
+
+
+def test_forward_returns_skip_nonpositive_price_anchors() -> None:
+    rows = [
+        _observation(TAIEX_DATASET_ID, date(2026, 1, 5), {"close": 0.0}, "TAIEX"),
+        _observation(TAIEX_DATASET_ID, date(2026, 1, 6), {"close": 110.0}, "TAIEX"),
+    ]
+
+    forward = compute_forward_returns(rows, horizons=(1,))
+
+    assert date(2026, 1, 5) not in forward
+    assert forward[date(2026, 1, 6)][1] is None
 
 
 # --- Layer1Report.is_monotonic ----------------------------------------------
@@ -159,6 +252,17 @@ def test_is_monotonic_none_with_fewer_than_two_populated_buckets() -> None:
     assert report.is_monotonic() is None
 
 
+def test_is_monotonic_rejects_a_horizon_outside_the_report() -> None:
+    report = _report_from_avg_returns([-0.01, 0.0, 0.01], horizon=10)
+    with pytest.raises(ValueError, match=r"report\.horizons"):
+        report.is_monotonic(5)
+
+
+def test_is_monotonic_ignores_nonfinite_bucket_averages() -> None:
+    report = _report_from_avg_returns([float("nan"), 0.01, 0.02])
+    assert report.is_monotonic() is True
+
+
 # --- summarize_buckets -------------------------------------------------------
 
 
@@ -197,6 +301,42 @@ def test_summarize_buckets_computes_avg_median_and_positive_ratio() -> None:
     assert bull.sample_count == 4
     assert bull.avg_return[10] == pytest.approx(0.04)
     assert bull.median_return[10] == pytest.approx(0.025)
+    assert bull.positive_ratio[10] == pytest.approx(1.0)
+
+
+def test_summarize_buckets_reclassifies_from_score_for_boundary_integrity() -> None:
+    rows = [
+        # The direction is intentionally stale; score is the canonical source
+        # for bucket boundaries and must win.
+        DailyBacktestRow(
+            "2026-01-01", FACTOR_AVAILABLE, 20.0, STRONG_BEAR, (), {10: 0.01}
+        ),
+        DailyBacktestRow("2026-01-02", FACTOR_AVAILABLE, 80.0, BEAR, (), {10: 0.02}),
+        DailyBacktestRow(
+            "2026-01-03", FACTOR_AVAILABLE, float("nan"), BULL, (), {10: 0.03}
+        ),
+    ]
+
+    buckets = {bucket.direction: bucket for bucket in summarize_buckets(rows, (10,))}
+
+    assert buckets[BEAR].sample_count == 1
+    assert buckets[STRONG_BULL].sample_count == 1
+    assert sum(bucket.sample_count for bucket in buckets.values()) == 2
+
+
+def test_summarize_buckets_ignores_nonfinite_forward_returns() -> None:
+    rows = [
+        DailyBacktestRow(
+            "2026-01-01", FACTOR_AVAILABLE, 70.0, BULL, (), {10: float("nan")}
+        ),
+        DailyBacktestRow("2026-01-02", FACTOR_AVAILABLE, 70.0, BULL, (), {10: 0.02}),
+    ]
+
+    bull = next(b for b in summarize_buckets(rows, (10,)) if b.direction == BULL)
+
+    assert bull.sample_count == 2
+    assert bull.avg_return[10] == pytest.approx(0.02)
+    assert bull.median_return[10] == pytest.approx(0.02)
     assert bull.positive_ratio[10] == pytest.approx(1.0)
 
 
@@ -281,6 +421,8 @@ def test_run_layer1_backtest_buckets_every_available_day_exactly_once() -> None:
     payload = report.as_dict()
     assert payload["scored_days"] == 21
     assert set(payload["monotonic"]) == {"5", "10", "20"}
+    assert len(payload["daily_rows"]) == 21
+    assert payload["daily_rows"][0]["target_date"] == start.isoformat()
 
 
 def test_run_layer1_backtest_rejects_a_primary_horizon_outside_the_horizon_list() -> (
@@ -303,3 +445,25 @@ def test_run_layer1_backtest_rejects_a_primary_horizon_outside_the_horizon_list(
             horizons=(5, 10),
             primary_horizon=20,
         )
+
+
+def test_run_layer1_backtest_keeps_empty_input_explicitly_unavailable() -> None:
+    report = run_layer1_backtest(
+        taiex_observations=[],
+        pcr_observations=[],
+        tx_observations=[],
+        vix_observations=[],
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 31),
+    )
+
+    assert report.scored_days == 0
+    assert report.available_days == 0
+    assert report.daily_rows == ()
+    assert report.is_monotonic() is None
+    assert all(bucket.sample_count == 0 for bucket in report.buckets)
+    assert all(bucket.avg_return[10] is None for bucket in report.buckets)
+    assert '"daily_rows": []' in json.dumps(report.as_dict())
+    assert "Monotonic (10D avg return, low bucket to high): n/a" in format_report(
+        report
+    )

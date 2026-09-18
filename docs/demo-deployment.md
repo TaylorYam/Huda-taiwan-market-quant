@@ -3,8 +3,7 @@
 ## 目前狀態與依賴
 
 採用 [ADR 0004](adr/0004-streamlit-demo-hosting.md) 的 Streamlit Community Cloud 免費展示路線。
-基準 main `64f7a09` 沒有 Streamlit 入口；本 PR 只提供設定、檢查與程序，不宣稱網站已上線。
-需先合併 Dashboard 的 `streamlit_app.py`（若入口改名，同步本文件、workflow 與 checker 預設）。
+目前 `main` 已包含 `streamlit_app.py`、唯讀 Dashboard 與 Demo readiness smoke；本文件提供部署設定與驗收程序，不宣稱網站已上線。
 不以空白 placeholder 頁面冒充 Dashboard。本文件不授權生產部署或付費資源。
 
 ## 部署設定
@@ -12,12 +11,12 @@
 | 欄位 | 設定 |
 | --- | --- |
 | Repository | TaylorYam/Huda-taiwan-market-quant |
-| Branch | main；合併 Dashboard 與本 PR 後使用 |
+| Branch | main |
 | Main file path | streamlit_app.py |
 | Python | 3.12（Community Cloud Advanced settings） |
 | Dependencies | 根目錄 requirements.txt |
 | Streamlit config | .streamlit/config.toml |
-| Secrets | 初次 demo 留空 |
+| Secrets | 實際展示需設定 `SUPABASE_URL` 與 `SUPABASE_SECRET_KEY`；無 secrets 僅可跑 readiness smoke |
 
 由有權限的維護者登入 Community Cloud、授權此 GitHub repo、選 Create app，填上述欄位。
 先核對頁面只呈現允許公開的資料，再選公開可見性與部署。記錄實際 URL、部署 commit SHA、
@@ -28,13 +27,14 @@ Python 及安裝套件版本；本 repo 的 requirements.txt 目前未鎖定全�
 
 | 名稱 | 使用位置 | 公開展示要求 |
 | --- | --- | --- |
-| SUPABASE_URL | 既有 Actions Data API smoke／writer | demo 不需要 |
-| SUPABASE_SECRET_KEY | 既有 Actions server-side writer／smoke | 不放公開 demo；可繞過 RLS |
+| SUPABASE_URL | Dashboard 與既有 Actions Data API smoke／writer | 由伺服器端 secret 設定；不可放在 URL 或前端 |
+| SUPABASE_SECRET_KEY | Dashboard 與既有 Actions server-side writer／smoke | 僅由伺服器端 secret 設定；可繞過 RLS，絕不公開 |
 | MARKET_DB_URL | 舊 direct PostgreSQL 檢查／adapter | demo 不需要 |
 | APP_ENV / APP_PORT | 舊 .env.example placeholder | 目前無讀取程式；不控制 Streamlit |
 
-此 PR 不新增真實資料 Dashboard secret 契約；唯讀 adapter、publishable key 與 RLS 尚須另案實作驗收。
-不要為了讓展示有資料就放入 writer key。日後需 Streamlit secrets 時由管理介面配置，
+Dashboard 已有 server-side 唯讀讀取路徑，啟動時要求 `SUPABASE_URL` 與 `SUPABASE_SECRET_KEY`；
+它也會拒絕非 HTTPS、含帳密、查詢參數或 fragment 的 URL。這把 key 可繞過 RLS，不應直接視為真正的 read-only credential。不要為了讓展示有資料就把 key 放到瀏覽器或前端環境變數；
+日後需 Streamlit secrets 時由管理介面配置，
 root-level secrets 可映射環境變數；`.streamlit/secrets.toml` 受現有 `secrets.*` ignore 規則保護。
 `.env` 不會由本專案自動載入。檢查紀錄只留 secret 名稱與通過狀態。
 
@@ -61,7 +61,7 @@ GitHub Actions 的 **Demo readiness smoke** 可手動執行，無 secrets、無�
 更新時間、來源／demo 標示、缺資料狀態與 8 因子顯示。不可把 demo 分數當成今日真實訊號。
 記錄 URL、commit SHA、時間、health 結果、UI 截圖及資料日期才完成展示驗收。
 
-## PR #46 合併後：Supabase GitHub integration 驗收
+## Supabase GitHub integration（PR #46 已合併）驗收
 
 1. 確認 #46 已合併 main，root directory 為 repo 根目錄，GitHub integration 指向正確 repo、
    production branch 為 main。檢查 Supabase GitHub App 的 repo 授權、integration deployment 設定。
@@ -92,7 +92,7 @@ GitHub Actions 的 **Demo readiness smoke** 可手動執行，無 secrets、無�
 回復 main 的部署變更需走新 PR；回復已知良好版本後重跑 AppTest、health 及 UI 驗收。
 不得透過刪表回復 demo。必要時由維護者停止 Community Cloud app。
 
-尚需外部確認：Dashboard 入口合併、Community Cloud 登入／授權／公開 URL、雲端 Python 3.12
+尚需外部確認：Community Cloud 登入／授權／公開 URL、雲端 Python 3.12
 建置與互動、Supabase integration 設定與 migration history、RLS／權限及 Data API smoke。
 這些項目與平台免費方案現況須由管理者現場確認，不能由本機測試替代。
 

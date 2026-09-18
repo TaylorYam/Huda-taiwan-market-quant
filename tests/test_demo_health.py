@@ -1,6 +1,9 @@
 """Ensure liveness rejects login pages and failed/unreachable servers."""
 
+import subprocess
+import sys
 from io import BytesIO
+from pathlib import Path
 from unittest.mock import patch
 from urllib.error import URLError
 
@@ -47,6 +50,32 @@ def test_health_rejects_unsafe_urls(url):
         check_health(url)
 
 
-def test_missing_entrypoint_is_not_ready(tmp_path):
+def test_health_rejects_malformed_url_without_leaking_parser_details():
+    with pytest.raises(ValueError, match=r"^Use an HTTP\(S\) base URL") as error:
+        check_health("https://[bad")
+    assert "bad" not in str(error.value)
+
+
+def test_missing_entrypoint_is_not_ready():
+    missing_entrypoint = Path(__file__).with_name("__missing_streamlit_entrypoint__.py")
+    assert not missing_entrypoint.exists()
     with pytest.raises(ValueError, match="entrypoint is missing"):
-        check_app(tmp_path / "missing.py")
+        check_app(missing_entrypoint)
+
+
+def test_entrypoint_smoke_works_when_started_outside_repository():
+    repository = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(repository / "scripts" / "check_demo.py"),
+            "--entrypoint",
+            str(repository / "streamlit_app.py"),
+        ],
+        cwd=repository.parent,
+        capture_output=True,
+        text=True,
+        timeout=45,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr

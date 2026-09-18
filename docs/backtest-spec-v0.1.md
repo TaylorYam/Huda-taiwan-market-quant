@@ -298,21 +298,30 @@ Buy & Hold Comparison
 - `compute_forward_returns` 以 TAIEX 收盤序列本身的交易日順位計算未來 5／10／20
   日報酬，作為驗證用的結果標籤；資料不足以支撐某個窗口時明確回傳 `None`，不用
   外插值頂替。
+- 第一層的 forward return 是**排序驗證標籤**，不是交易層的成交報酬：以訊號日收盤
+  `close_t` 為分母、以第 `h` 個後續交易日收盤 `close_{t+h}` 為分子。這讓分數與
+  結果標籤的錨點固定且可重現；真正策略回測仍須遵守第 1 節，將訊號延到下一個交易日
+  才生效。`run_backtest_layer1` 的 CLI 會在指定報告終點後多載入每個 horizon 的
+  7 倍曆日，避免資料查詢範圍提前截斷最後幾個 forward labels；標籤本身仍只按實際
+  TAIEX 交易日列計算。
 - `summarize_buckets` 把每日分數依 `src.scoring.contracts.classify_score`
   （與正式評分同一個函式，不重新定義門檻）分入五組，計算樣本數、平均／中位報酬
   與上漲比例；`unavailable` 的日子不會被計入任何一組。
 - `Layer1Report.is_monotonic()` 檢查平均報酬是否由低分組到高分組遞增；少於兩組
   有樣本時明確回傳「無法判斷」，不會假裝有結論。
+- 輸出 JSON 除了分組統計，也保留每個訊號日的 `daily_rows`（狀態、分數、缺少的
+  因子與各 horizon 報酬），方便追溯資料品質。沒有 TAIEX 收盤或沒有完整分數的日子
+  不會補成中性；空資料會產生零樣本、各組統計為 `null`，單調性回傳無法判斷，不能
+  被引用為模型有效性的證據。
 
-**一個重要的語意差異**：這個引擎呼叫評分層時刻意不帶 `as_of`（即
-`as_of_policy` 退回只看 `observation_date <= target_date`），而不是比照
-`daily_runner.py` 現場運行時使用的 `retrieved_at`／`ingested_at`／`published_at`
-knowledge-boundary 檢查。原因是本文件第 7 節提到的一次性歷史回補資料，其
-`retrieved_at`／`ingested_at` 記的是「回補當下」（例如 2026-09），不是「歷史上
-那一天真的知道」；如果沿用現場運行的檢查邏輯，等於要求回測當天就已經在
-2026 年收到資料，所有歷史日期都會判定為不可用。回測的 look-ahead 防線改為
-單純依賴 `observation_date`，這已經是每個因子 adapter 在 `as_of=None` 時的預設
-行為，不是另外發明的規則。
+**一個重要的語意差異**：這個引擎不把 bulk backfill 的
+`retrieved_at`／`ingested_at` 當成歷史知識邊界，因為它們記的是「回補當下」（例如
+2026-09），不是「歷史上那一天真的知道」。每個訊號日會建立自己的資料快照：必須
+符合 `observation_date <= target_date`；若列有 `published_at`，也必須是 target date
+當日或以前。沒有 `published_at` 的回補列才採 observation date fallback。如此既不會
+因回補時間把全部歷史資料判成不可用，也不會讓 target date 之後才發布的修訂滲入舊
+訊號。Forward label 則使用整段資料選出的最終價格版本，代表事後已知的實現報酬，
+與當日 score 的歷史版本刻意分離。
 
 **目前仍缺的是資料，不是程式**：8 個核心因子的官方資料共同起點目前仍卡在
 Taiwan VIX／法人期貨 OI 的 ~2023-09（見

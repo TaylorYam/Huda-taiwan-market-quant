@@ -1,22 +1,21 @@
 # 0004: Streamlit Community Cloud 公開展示路線
 
-- Status: Proposed（本 PR 合併即採用；外部部署仍由維護者執行）
+- Status: Accepted（外部部署仍由維護者執行）
 - Date: 2026-09-17
 - Supersedes: ADR 0002 的 Dashboard hosting 選擇；資料持久化與排程維持不變
 
 ## Context
 
-盤點基準為 origin/main `64f7a09`：requirements.txt 已包含 Streamlit，
-但 src/dashboard 僅有 view_model.py，尚無 Streamlit 可執行入口、Vercel handler、
-vercel.json 或前端建置。不能把既有資料轉換模組當成已完成的網站。
+盤點基準為 origin/main `ab3abe2`：requirements.txt 已包含 Streamlit，
+且 `streamlit_app.py`、`src/dashboard/app.py`、唯讀 Data API adapter 與 demo smoke 已合併。
+外部 Community Cloud 部署與公開 URL 驗收仍未完成；不能把本機 smoke 當成已上線網站。
 
 ## Decision
 
 最快免費展示路線採 Streamlit Community Cloud，入口約定 `streamlit_app.py`，
 Python 3.12，從 repository 根目錄讀取 requirements.txt 與 .streamlit/config.toml。
-Dashboard 入口由獨立工作提供，本 PR 不改 Dashboard 或評分邏輯。
-入口合併、無憑證 smoke 通過及瀏覽器驗收後才可宣告 demo ready。
-初次展示採不需資料庫憑證的 demo／空資料狀態；真實資料唯讀路徑未完成前，不接 writer key。
+Dashboard 入口已由獨立工作合併；無憑證 smoke 已通過，瀏覽器驗收與外部部署仍是 demo ready 的必要條件。
+初次展示可採不需資料庫憑證的空資料狀態；若展示真實資料，憑證只留在 server-side，且須另行完成權限分離驗收。
 
 Vercel 的 Python Functions 文件要求 ASGI／WSGI handler；Streamlit 是以
 `streamlit run` 啟動的有 session 狀態伺服器，現有 repo 沒有該 adapter。

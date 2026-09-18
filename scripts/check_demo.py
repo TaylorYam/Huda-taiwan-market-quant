@@ -14,10 +14,19 @@ from urllib.request import urlopen
 
 
 def check_health(base_url: str, timeout: float = 15) -> None:
-    parsed = urlsplit(base_url)
+    try:
+        parsed = urlsplit(base_url)
+        # Accessing hostname/port validates malformed bracketed hosts and
+        # ports that urlsplit parses lazily.
+        hostname = parsed.hostname
+        _port = parsed.port
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "Use an HTTP(S) base URL without credentials, query or fragment"
+        ) from exc
     if (
         parsed.scheme not in {"http", "https"}
-        or not parsed.hostname
+        or not hostname
         or parsed.username
         or parsed.password
         or parsed.query

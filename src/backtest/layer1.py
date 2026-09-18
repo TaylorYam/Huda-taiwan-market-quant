@@ -14,10 +14,12 @@ collector actually saw the data, which matters for a same-day production
 run. For a replay over bulk-backfilled history, every row's collection
 timestamps read "whenever the backfill happened to run" (e.g. today),
 regardless of the row's own observation date; gating on them would make
-every historical day look like it had no data yet. This module therefore
-calls the scoring layer with ``as_of=None``, which falls back to filtering
-purely on ``observation_date <= target_date`` in every factor adapter — the
-only knowledge boundary that is meaningful for a bulk historical replay.
+every historical day look like it had no data yet. This module therefore does
+not use collection timestamps as the replay boundary. It builds a per-target
+snapshot: ``observation_date`` is always required, and a present
+``published_at`` must not be later than the target date. Rows without
+``published_at`` retain the observation-date fallback used for bulk
+backfills.
 
 Rolling/expanding history (docs/backtest-spec-v0.1.md#5) still applies: each
 day's percentile history is rebuilt by :func:`src.scoring.history.build_historical_values`
@@ -30,7 +32,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timedelta
 from itertools import pairwise
 from statistics import median
 from typing import Any
@@ -43,12 +45,18 @@ from src.scoring.contracts import (
     NEUTRAL,
     STRONG_BEAR,
     STRONG_BULL,
+    classify_score,
 )
 from src.scoring.history import build_historical_values
 from src.scoring.pipeline import DailyScoreResult, calculate_daily_score
 
 FORWARD_RETURN_HORIZONS: tuple[int, ...] = (5, 10, 20)
 PRIMARY_HORIZON = 10
+# The CLI must load observations beyond the reported end date so the final
+# scored days can receive their forward-return labels. Seven calendar days per
+# trading-day horizon leaves room for weekends and market holidays; the
+# actual labels still use the observed trading-day sequence below.
+CALENDAR_DAYS_PER_TRADING_DAY = 7
 
 # Canonical low-to-high order for the five v0.1 buckets, reusing the same
 # direction labels src.scoring.contracts.classify_score already assigns to
@@ -132,10 +140,13 @@ class Layer1Report:
         """
 
         target_horizon = self.primary_horizon if horizon is None else horizon
+        if target_horizon not in self.horizons:
+            raise ValueError("horizon must be one of report.horizons")
         values = [
-            bucket.avg_return[target_horizon]
+            value
             for bucket in self.buckets
-            if bucket.avg_return.get(target_horizon) is not None
+            if (value := bucket.avg_return.get(target_horizon)) is not None
+            and math.isfinite(value)
         ]
         if len(values) < 2:
             return None
@@ -154,46 +165,136 @@ class Layer1Report:
                 str(horizon): self.is_monotonic(horizon) for horizon in self.horizons
             },
             "buckets": [bucket.as_dict() for bucket in self.buckets],
+            "daily_rows": [row.as_dict() for row in self.daily_rows],
         }
 
 
 def _as_date(value: date | str) -> date:
-    return date.fromisoformat(value) if isinstance(value, str) else value
+    """Normalize date-like inputs while keeping all comparisons date-only."""
+
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        # Observation envelopes may carry an ISO timestamp in date fields;
+        # accept it at this boundary and retain only its calendar date.
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).date()
 
 
-def _latest_taiex_closes(observations: Sequence[Any]) -> list[tuple[date, float]]:
+def _normalize_horizons(horizons: Sequence[int]) -> tuple[int, ...]:
+    normalized = tuple(horizons)
+    if not normalized:
+        raise ValueError("horizons must contain at least one positive integer")
+    if any(
+        isinstance(horizon, bool) or not isinstance(horizon, int) or horizon <= 0
+        for horizon in normalized
+    ):
+        raise ValueError("horizons must contain only positive integers")
+    if len(set(normalized)) != len(normalized):
+        raise ValueError("horizons must not contain duplicates")
+    return normalized
+
+
+def forward_data_end_date(
+    end_date: date | str,
+    horizons: Sequence[int] = FORWARD_RETURN_HORIZONS,
+) -> date:
+    """Return a conservative observation end date for forward-return labels.
+
+    Backtest reports keep ``end_date`` as the requested signal period, while
+    data loaders should read past it. The label builder counts rows present in
+    the TAIEX trading-day series, so this calendar padding only prevents the
+    loader from truncating otherwise available future labels.
+    """
+
+    normalized = _normalize_horizons(horizons)
+    return _as_date(end_date) + timedelta(
+        days=max(normalized) * CALENDAR_DAYS_PER_TRADING_DAY
+    )
+
+
+def _known_by(observations: Sequence[Any], target: date) -> list[Any]:
+    """Keep source versions that were knowable on a target calendar date.
+
+    Bulk backfills often have no ``published_at``; for those rows the
+    observation date is the documented fallback boundary. A present
+    publication timestamp is still enforced so a later correction cannot
+    leak into an earlier signal. Malformed timestamps are excluded
+    conservatively.
+    """
+
+    visible: list[Any] = []
+    for observation in observations:
+        try:
+            observation_day = _as_date(_field(observation, "observation_date"))
+        except (AttributeError, KeyError, TypeError, ValueError):
+            continue
+        if observation_day > target:
+            continue
+        published_at = _optional_text(observation, "published_at")
+        if published_at is not None:
+            published_day = _timestamp_date(published_at)
+            if published_day is None or published_day > target:
+                continue
+        visible.append(observation)
+    return visible
+
+
+def _timestamp_date(value: str) -> date | None:
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).date()
+    except (TypeError, ValueError):
+        return None
+
+
+def _latest_taiex_closes(
+    observations: Sequence[Any], *, knowledge_date: date | None = None
+) -> list[tuple[date, float]]:
     """One close per date: the highest-priority available TAIEX revision.
 
     Forward returns are this backtest's ground truth, computed with full
-    knowledge of the whole series (unlike the score, which only ever sees
-    the past). The revision tie-break mirrors
+    knowledge of the whole series. The revision tie-break mirrors
     src.factors.contracts._observation_order (latest published_at, then
     source_revision, then retrieved_at, then payload hash) so the close used
-    here always agrees with the close each day's own score was computed
-    from.
+    here intentionally uses the final selected revision for the realized
+    label; score replay separately uses the revision visible at each target
+    date.
     """
 
     best: dict[date, tuple[tuple[str, str, str, str], float]] = {}
-    for observation in observations:
-        if observation.dataset_id != TAIEX_DATASET_ID:
-            continue
-        if observation.quality_status != "available":
-            continue
-        raw_close = observation.values.get("close")
-        if raw_close is None:
-            continue
+    source = (
+        _known_by(observations, knowledge_date)
+        if knowledge_date is not None
+        else observations
+    )
+    for observation in source:
         try:
+            if _field(observation, "dataset_id") != TAIEX_DATASET_ID:
+                continue
+            if _field(observation, "quality_status") != "available":
+                continue
+            values = _field(observation, "values")
+            if not isinstance(values, Mapping):
+                continue
+            raw_close = values.get("close")
+            if raw_close is None:
+                continue
             close = float(raw_close)
-        except (TypeError, ValueError):
+            day = _as_date(_field(observation, "observation_date"))
+        except (AttributeError, KeyError, TypeError, ValueError):
             continue
-        if not math.isfinite(close):
+        # A non-positive close cannot be a valid price anchor. Treat it as a
+        # missing observation so it cannot create a bogus return denominator.
+        if not math.isfinite(close) or close <= 0:
             continue
-        day = date.fromisoformat(observation.observation_date)
         order = (
-            observation.published_at or "",
-            observation.source_revision or "",
-            observation.retrieved_at or "",
-            observation.source_payload_hash or "",
+            _optional_text(observation, "published_at") or "",
+            _optional_text(observation, "source_revision") or "",
+            _optional_text(observation, "retrieved_at") or "",
+            _optional_text(observation, "source_payload_hash") or "",
         )
         current = best.get(day)
         if current is None or order > current[0]:
@@ -201,23 +302,40 @@ def _latest_taiex_closes(observations: Sequence[Any]) -> list[tuple[date, float]
     return sorted((day, payload[1]) for day, payload in best.items())
 
 
+def _field(observation: Any, name: str) -> Any:
+    if isinstance(observation, Mapping):
+        return observation[name]
+    return getattr(observation, name)
+
+
+def _optional_text(observation: Any, name: str) -> str | None:
+    try:
+        value = _field(observation, name)
+    except (AttributeError, KeyError):
+        return None
+    return str(value) if value is not None else None
+
+
 def compute_forward_returns(
     taiex_observations: Sequence[Any],
     horizons: Sequence[int] = FORWARD_RETURN_HORIZONS,
 ) -> dict[date, dict[int, float | None]]:
-    """Realized forward TAIEX returns per signal date.
+    """Compute close-to-close ranking labels per signal date.
 
     Horizons are counted in trading days actually present in this series
     (gaps are never filled), matching backtest-spec-v0.1.md#2. A horizon
     that runs past the end of the available series is ``None`` rather than
-    an extrapolated guess.
+    an extrapolated guess. Each label is ``close[t + horizon] / close[t] - 1``;
+    this diagnostic anchor is separate from a strategy's next-day execution
+    price.
     """
 
+    normalized_horizons = _normalize_horizons(horizons)
     closes = _latest_taiex_closes(taiex_observations)
     result: dict[date, dict[int, float | None]] = {}
     for index, (day, close) in enumerate(closes):
         horizon_returns: dict[int, float | None] = {}
-        for horizon in horizons:
+        for horizon in normalized_horizons:
             future_index = index + horizon
             if future_index < len(closes) and close != 0:
                 horizon_returns[horizon] = closes[future_index][1] / close - 1
@@ -260,31 +378,50 @@ def build_score_series(
         raise ValueError("start_date must not be after end_date")
     candidate_days = [
         day
-        for day, _ in _latest_taiex_closes(taiex_observations)
+        for day, _ in _latest_taiex_closes(taiex_observations, knowledge_date=end)
         if start <= day <= end
     ]
     results: list[DailyScoreResult] = []
     for day in candidate_days:
+        # Replay only the versions visible at this date. Missing publication
+        # timestamps retain the bulk-backfill observation-date policy.
+        target_taiex = _known_by(taiex_observations, day)
+        target_pcr = _known_by(pcr_observations, day)
+        target_tx = _known_by(tx_observations, day)
+        target_vix = _known_by(vix_observations, day)
+        target_institutional = (
+            _known_by(institutional_observations, day)
+            if institutional_observations is not None
+            else None
+        )
+        target_cash = (
+            _known_by(cash_observations, day) if cash_observations is not None else None
+        )
+        target_turnover = (
+            _known_by(turnover_observations, day)
+            if turnover_observations is not None
+            else None
+        )
         historical_values = build_historical_values(
-            taiex_observations=taiex_observations,
-            pcr_observations=pcr_observations,
-            tx_observations=tx_observations,
-            vix_observations=vix_observations,
-            institutional_observations=institutional_observations,
-            cash_observations=cash_observations,
-            turnover_observations=turnover_observations,
+            taiex_observations=target_taiex,
+            pcr_observations=target_pcr,
+            tx_observations=target_tx,
+            vix_observations=target_vix,
+            institutional_observations=target_institutional,
+            cash_observations=target_cash,
+            turnover_observations=target_turnover,
             target_date=day,
             window_years=window_years,
         )
         results.append(
             calculate_daily_score(
-                taiex_observations=taiex_observations,
-                pcr_observations=pcr_observations,
-                tx_observations=tx_observations,
-                vix_observations=vix_observations,
-                institutional_observations=institutional_observations,
-                cash_observations=cash_observations,
-                turnover_observations=turnover_observations,
+                taiex_observations=target_taiex,
+                pcr_observations=target_pcr,
+                tx_observations=target_tx,
+                vix_observations=target_vix,
+                institutional_observations=target_institutional,
+                cash_observations=target_cash,
+                turnover_observations=target_turnover,
                 target_date=day,
                 historical_values=historical_values,
             )
@@ -303,11 +440,18 @@ def summarize_buckets(
     silently counts as neutral.
     """
 
+    normalized_horizons = _normalize_horizons(horizons)
     grouped: dict[str, list[DailyBacktestRow]] = {label: [] for label in BUCKET_ORDER}
     for row in rows:
-        if row.status != FACTOR_AVAILABLE or row.direction is None:
+        if row.status != FACTOR_AVAILABLE or row.score is None:
             continue
-        grouped[row.direction].append(row)
+        try:
+            direction = classify_score(row.score)
+        except (TypeError, ValueError):
+            # A malformed score is a data-quality failure, not evidence for
+            # the neutral bucket (or any other direction).
+            continue
+        grouped[direction].append(row)
 
     buckets = []
     for label in BUCKET_ORDER:
@@ -315,11 +459,12 @@ def summarize_buckets(
         avg: dict[int, float | None] = {}
         med: dict[int, float | None] = {}
         positive_ratio: dict[int, float | None] = {}
-        for horizon in horizons:
+        for horizon in normalized_horizons:
             values = [
                 value
                 for member in members
                 if (value := member.forward_returns.get(horizon)) is not None
+                and math.isfinite(value)
             ]
             if values:
                 avg[horizon] = sum(values) / len(values)
@@ -361,7 +506,8 @@ def run_layer1_backtest(
 ) -> Layer1Report:
     """Run the full Layer 1 replay and bucket-return summary in one call."""
 
-    if primary_horizon not in horizons:
+    normalized_horizons = _normalize_horizons(horizons)
+    if primary_horizon not in normalized_horizons:
         raise ValueError("primary_horizon must be one of horizons")
 
     score_results = build_score_series(
@@ -376,13 +522,13 @@ def run_layer1_backtest(
         end_date=end_date,
         window_years=window_years,
     )
-    forward_returns = compute_forward_returns(taiex_observations, horizons)
+    forward_returns = compute_forward_returns(taiex_observations, normalized_horizons)
 
     rows = []
     for result in score_results:
         day = date.fromisoformat(result.target_date)
         day_returns = forward_returns.get(day) or {
-            horizon: None for horizon in horizons
+            horizon: None for horizon in normalized_horizons
         }
         rows.append(
             DailyBacktestRow(
@@ -395,13 +541,13 @@ def run_layer1_backtest(
             )
         )
 
-    buckets = summarize_buckets(rows, horizons)
+    buckets = summarize_buckets(rows, normalized_horizons)
     available_days = sum(1 for row in rows if row.status == FACTOR_AVAILABLE)
     return Layer1Report(
         model_version=MODEL_VERSION,
         backtest_start=_as_date(start_date).isoformat(),
         backtest_end=_as_date(end_date).isoformat(),
-        horizons=tuple(horizons),
+        horizons=normalized_horizons,
         primary_horizon=primary_horizon,
         scored_days=len(rows),
         available_days=available_days,
@@ -461,6 +607,7 @@ def format_report(report: Layer1Report) -> str:
 __all__ = [
     "BUCKET_ORDER",
     "BUCKET_RANGE_LABEL",
+    "CALENDAR_DAYS_PER_TRADING_DAY",
     "FORWARD_RETURN_HORIZONS",
     "PRIMARY_HORIZON",
     "BucketStats",
@@ -469,6 +616,7 @@ __all__ = [
     "build_score_series",
     "compute_forward_returns",
     "format_report",
+    "forward_data_end_date",
     "run_layer1_backtest",
     "summarize_buckets",
 ]

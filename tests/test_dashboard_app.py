@@ -287,6 +287,7 @@ def test_dashboard_renders_history_charts_without_recomputing(monkeypatch):
     )
     assert not app.exception
     assert any("歷史趨勢" in header.value for header in app.header)
+    assert len(app.tabs) == 8
     assert store.get_market_score_history.call_count == 2
     store.get_observation_history.assert_called_once_with(
         "twse_taiex_daily_v1", limit=1000

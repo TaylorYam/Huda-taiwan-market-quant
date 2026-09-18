@@ -288,9 +288,14 @@ def build_tradingview_kline_html(
         + score_payload
         + """;
     const scoreByTime = new Map(scoreData.map((point) => [point.time, point.value]));
+    const alignedScoreByTime = new Map();
+    let previousScore;
     const alignedScoreData = candleData.map((point) => {
       const score = scoreByTime.get(point.time);
-      return score === undefined ? { time: point.time } : { time: point.time, value: score };
+      if (score !== undefined) previousScore = score;
+      if (previousScore === undefined) return { time: point.time };
+      alignedScoreByTime.set(point.time, previousScore);
+      return { time: point.time, value: previousScore };
     });
     const priceElement = document.getElementById('price-chart');
     const valuesElement = document.getElementById('values');
@@ -418,7 +423,7 @@ def build_tradingview_kline_html(
         if (syncingCrosshair) return;
         syncingCrosshair = true;
         const key = timeKey(param.time);
-        const score = scoreByTime.get(key);
+        const score = alignedScoreByTime.get(key);
         if (score !== undefined) {
           scoreChart.setCrosshairPosition(score, param.time, scoreSeries);
           const candle = candleByTime.get(key);

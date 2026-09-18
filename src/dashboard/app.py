@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Mapping
 from datetime import datetime
@@ -11,6 +12,7 @@ from urllib.parse import urlsplit
 import altair as alt
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 from requests.exceptions import RequestException
 
 from src.dashboard.data import DashboardDataStore
@@ -195,71 +197,171 @@ def factor_history_frame(rows: object) -> pd.DataFrame:
     return pd.DataFrame(output, columns=["日期", *FACTOR_LABELS.values()])
 
 
-def build_interactive_market_chart(
-    ohlc: pd.DataFrame, score_plot: pd.DataFrame
-) -> alt.TopLevelMixin | None:
-    """Build a TradingView-like K-line/score view with shared zoom controls."""
+TRADINGVIEW_LIBRARY_URL = (
+    "https://unpkg.com/lightweight-charts@4.2.2/"
+    "dist/lightweight-charts.standalone.production.js"
+)
 
-    charts: list[alt.Chart] = []
-    if not ohlc.empty:
-        chart_data = ohlc.copy()
-        chart_data["日期"] = pd.to_datetime(chart_data["日期"])
-        base = alt.Chart(chart_data).encode(
+
+def build_tradingview_kline_html(ohlc: pd.DataFrame) -> str | None:
+    """Build a self-contained TradingView Lightweight Charts candlestick view.
+
+    The library's price scale is deliberately left in auto-scale mode. That
+    makes the right axis follow the highest and lowest candles in the current
+    visible range whenever the user zooms or drags horizontally.
+    """
+
+    if ohlc.empty:
+        return None
+    rows = []
+    for row in ohlc.to_dict("records"):
+        date = row.get("日期")
+        if not isinstance(date, str) or not date:
+            continue
+        numbers = {
+            field: _finite_number(row.get(field), minimum=0)
+            for field in ("open", "high", "low", "close")
+        }
+        if any(value is None for value in numbers.values()):
+            continue
+        rows.append({"time": date, **numbers})
+    if not rows:
+        return None
+    payload = json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
+    return (
+        """<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root { color-scheme: light; }
+    html, body { margin: 0; padding: 0; background: #ffffff; }
+    body { overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .shell { width: 100%; height: 560px; display: flex; flex-direction: column; background: #ffffff; }
+    .legend { height: 42px; padding: 8px 14px 0; box-sizing: border-box; color: #1f2937; font-size: 13px; line-height: 20px; }
+    .title { font-weight: 700; letter-spacing: .01em; }
+    .values { color: #4b5563; margin-left: 12px; }
+    .values span { margin-right: 10px; }
+    .values .positive { color: #0f9f91; }
+    .values .negative { color: #e05252; }
+    #chart { flex: 1; min-height: 0; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="legend" id="legend">
+      <span class="title">TSEC WEIGHTED INDEX · 1D</span>
+      <span class="values" id="values"></span>
+    </div>
+    <div id="chart" aria-label="台指大盤日 K 線圖"></div>
+  </div>
+  <script src="""
+        + TRADINGVIEW_LIBRARY_URL
+        + """></script>
+  <script>
+    const data = """
+        + payload
+        + """;
+    const chartElement = document.getElementById('chart');
+    const valuesElement = document.getElementById('values');
+    const chart = LightweightCharts.createChart(chartElement, {
+      autoSize: true,
+      layout: { background: { color: '#ffffff' }, textColor: '#374151', fontSize: 12 },
+      grid: {
+        vertLines: { color: '#eef1f4' },
+        horzLines: { color: '#eef1f4' }
+      },
+      rightPriceScale: {
+        borderColor: '#d1d5db',
+        autoScale: true,
+        scaleMargins: { top: 0.08, bottom: 0.08 }
+      },
+      timeScale: {
+        borderColor: '#d1d5db',
+        rightOffset: 8,
+        barSpacing: 8,
+        minBarSpacing: 3,
+        timeVisible: false,
+        secondsVisible: false,
+        fixLeftEdge: false,
+        fixRightEdge: false,
+        rightBarStaysOnScroll: true
+      },
+      crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+      handleScroll: {
+        mouseWheel: false,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: false
+      },
+      handleScale: {
+        mouseWheel: true,
+        pinch: true,
+        axisPressedMouseMove: true,
+        axisDoubleClickReset: true,
+        axisLabelPressedMouseMove: true
+      }
+    });
+    const candles = chart.addCandlestickSeries({
+      upColor: '#26a69a',
+      downColor: '#ef5350',
+      borderUpColor: '#26a69a',
+      borderDownColor: '#ef5350',
+      wickUpColor: '#26a69a',
+      wickDownColor: '#ef5350',
+      priceLineVisible: true,
+      lastValueVisible: true
+    });
+    candles.setData(data);
+    const latest = data[data.length - 1];
+    const renderValues = (point) => {
+      if (!point) return;
+      const cls = point.close >= point.open ? 'positive' : 'negative';
+      valuesElement.innerHTML =
+        '<span>開 ' + Number(point.open).toLocaleString(undefined, { maximumFractionDigits: 2 }) + '</span>' +
+        '<span>高 ' + Number(point.high).toLocaleString(undefined, { maximumFractionDigits: 2 }) + '</span>' +
+        '<span>低 ' + Number(point.low).toLocaleString(undefined, { maximumFractionDigits: 2 }) + '</span>' +
+        '<span class="' + cls + '">收 ' + Number(point.close).toLocaleString(undefined, { maximumFractionDigits: 2 }) + '</span>';
+    };
+    renderValues(latest);
+    chart.subscribeCrosshairMove((param) => {
+      const point = param.seriesData.get(candles);
+      renderValues(point || latest);
+    });
+    const start = Math.max(0, data.length - 180);
+    chart.timeScale().setVisibleLogicalRange({ from: start, to: data.length + 8 });
+  </script>
+</body>
+</html>
+"""
+    )
+
+
+def build_market_score_chart(score_plot: pd.DataFrame) -> alt.TopLevelMixin | None:
+    """Build the independent Market Score trend chart."""
+
+    if score_plot.empty:
+        return None
+    score_data = score_plot.copy()
+    score_data["日期"] = pd.to_datetime(score_data["日期"])
+    zoom = alt.selection_interval(
+        name="market_score_zoom", bind="scales", encodings=["x", "y"]
+    )
+    return (
+        alt.Chart(score_data)
+        .mark_line(point=True, color="#2563eb")
+        .encode(
             x=alt.X("日期:T", title="日期"),
+            y=alt.Y("Market Score:Q", title="分數", scale=alt.Scale(domain=[0, 100])),
             tooltip=[
                 alt.Tooltip("日期:T", title="日期"),
-                alt.Tooltip("open:Q", title="開盤", format=",.2f"),
-                alt.Tooltip("high:Q", title="最高", format=",.2f"),
-                alt.Tooltip("low:Q", title="最低", format=",.2f"),
-                alt.Tooltip("close:Q", title="收盤", format=",.2f"),
+                alt.Tooltip("Market Score:Q", title="Market Score", format=",.2f"),
             ],
         )
-        wick = base.mark_rule().encode(y=alt.Y("low:Q", title="指數"), y2="high:Q")
-        body = base.mark_bar(size=7).encode(
-            y="open:Q",
-            y2="close:Q",
-            color=alt.condition(
-                alt.datum.close >= alt.datum.open,
-                alt.value("#d84a4a"),
-                alt.value("#2f8f67"),
-            ),
-        )
-        charts.append(
-            (wick + body)
-            .properties(height=320, title="台指大盤 K 線（主圖）")
-            .resolve_scale(y="independent")
-        )
-
-    if not score_plot.empty:
-        score_data = score_plot.copy()
-        score_data["日期"] = pd.to_datetime(score_data["日期"])
-        charts.append(
-            alt.Chart(score_data)
-            .mark_line(point=True)
-            .encode(
-                x=alt.X("日期:T", title="日期"),
-                y=alt.Y(
-                    "Market Score:Q", title="分數", scale=alt.Scale(domain=[0, 100])
-                ),
-                tooltip=[
-                    alt.Tooltip("日期:T", title="日期"),
-                    alt.Tooltip("Market Score:Q", title="Market Score", format=",.2f"),
-                ],
-            )
-            .properties(height=160, title="Market Score（副圖）")
-        )
-
-    if not charts:
-        return None
-    chart: alt.TopLevelMixin
-    if len(charts) == 1:
-        chart = charts[0]
-    else:
-        chart = alt.vconcat(*charts).resolve_scale(x="shared", y="independent")
-    zoom = alt.selection_interval(
-        name="market_chart_zoom", bind="scales", encodings=["x", "y"]
+        .properties(height=220, title="Market Score 趨勢")
+        .add_params(zoom)
     )
-    return chart.add_params(zoom)
 
 
 def render_history_charts(store: DashboardDataStore) -> None:
@@ -280,13 +382,19 @@ def render_history_charts(store: DashboardDataStore) -> None:
         st.warning("無法讀取 TAIEX 歷史，暫不顯示 K 線圖。")
         taiex_rows = []
     ohlc = taiex_ohlc_frame(taiex_rows)
-    st.subheader("台指大盤 K 線與 Market Score")
-    market_chart = build_interactive_market_chart(ohlc, score_plot)
-    if market_chart is None:
-        st.info("目前沒有可繪製的 TAIEX OHLC 或 available Market Score 資料。")
+    st.subheader("台指大盤 K 線 · TradingView 風格")
+    kline_html = build_tradingview_kline_html(ohlc)
+    if kline_html is None:
+        st.info("目前沒有可繪製的 TAIEX OHLC 資料。")
     else:
-        st.altair_chart(market_chart, use_container_width=True)
-        st.caption("操作：滑鼠滾輪縮放 X/Y 軸；拖曳平移；雙擊重設視圖。")
+        components.html(kline_html, height=560, scrolling=False)
+        st.caption(
+            "操作：滑鼠滾輪縮放時間範圍；按住滑鼠左鍵左右拖曳平移；右側價格軸會依目前可見 K 線自動調整。"
+        )
+    st.subheader("Market Score 趨勢")
+    score_chart = build_market_score_chart(score_plot)
+    if score_chart is not None:
+        st.altair_chart(score_chart, use_container_width=True)
     if score_plot.empty:
         st.info(
             "目前沒有可繪製的 available Market Score；unavailable 日期不會被當成 0。"

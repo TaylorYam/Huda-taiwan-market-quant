@@ -7,7 +7,8 @@ from streamlit.testing.v1 import AppTest
 
 from src.dashboard.app import (
     SOURCE_DATASETS,
-    build_interactive_market_chart,
+    build_market_score_chart,
+    build_tradingview_kline_html,
     display_score,
     factor_history_frame,
     factor_rows,
@@ -257,18 +258,36 @@ def test_factor_history_leaves_unavailable_factor_cells_missing():
     assert pd.isna(frame.loc[0, "TAIEX 20 日動能"])
 
 
-def test_market_chart_binds_xy_zoom_and_shares_date_scale():
-    chart = build_interactive_market_chart(
+def test_tradingview_kline_html_uses_visible_range_auto_scale_and_zoom():
+    html = build_tradingview_kline_html(
         pd.DataFrame(
             [
-                {"日期": "2026-09-16", "open": 1, "high": 3, "low": 0.5, "close": 2},
+                {
+                    "日期": "2026-09-16",
+                    "open": 1,
+                    "high": 3,
+                    "low": 0.5,
+                    "close": 2,
+                },
             ]
-        ),
-        pd.DataFrame([{"日期": "2026-09-16", "Market Score": 68}]),
+        )
+    )
+    assert html is not None
+    assert "lightweight-charts@4.2.2" in html
+    assert "addCandlestickSeries" in html
+    assert "autoScale: true" in html
+    assert "mouseWheel: true" in html
+    assert "pressedMouseMove: true" in html
+    assert "setVisibleLogicalRange" in html
+    assert "Market Score" not in html
+
+
+def test_market_score_chart_keeps_independent_zoomable_trend():
+    chart = build_market_score_chart(
+        pd.DataFrame([{"日期": "2026-09-16", "Market Score": 68}])
     )
     assert chart is not None
     spec = chart.to_dict(validate=True)
-    assert spec["resolve"]["scale"] == {"x": "shared", "y": "independent"}
     assert spec["params"][0]["bind"] == "scales"
     assert spec["params"][0]["select"]["encodings"] == ["x", "y"]
 

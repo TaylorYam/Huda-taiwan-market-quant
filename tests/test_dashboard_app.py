@@ -279,6 +279,8 @@ def test_tradingview_kline_html_uses_visible_range_auto_scale_and_zoom():
     assert "mouseWheel: true" in html
     assert "pressedMouseMove: true" in html
     assert "setVisibleLogicalRange" in html
+    assert "getVisibleRange" in html
+    assert "setVisibleRange(visibleRange)" in html
     assert "Market Score" not in html
 
 

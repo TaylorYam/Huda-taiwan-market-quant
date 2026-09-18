@@ -390,11 +390,13 @@ def build_tradingview_kline_html(
     }
     let syncingRange = false;
     charts.forEach((source) => {
-      source.timeScale().subscribeVisibleLogicalRangeChange((range) => {
-        if (syncingRange || !range) return;
+      source.timeScale().subscribeVisibleLogicalRangeChange(() => {
+        if (syncingRange) return;
+        const visibleRange = source.timeScale().getVisibleRange();
+        if (!visibleRange) return;
         syncingRange = true;
         charts.forEach((target) => {
-          if (target !== source) target.timeScale().setVisibleLogicalRange(range);
+          if (target !== source) target.timeScale().setVisibleRange(visibleRange);
         });
         syncingRange = false;
       });
@@ -438,7 +440,11 @@ def build_tradingview_kline_html(
     }
     const start = Math.max(0, candleData.length - 180);
     const initialRange = { from: start, to: candleData.length + 8 };
-    charts.forEach((chart) => chart.timeScale().setVisibleLogicalRange(initialRange));
+    priceChart.timeScale().setVisibleLogicalRange(initialRange);
+    const initialVisibleRange = priceChart.timeScale().getVisibleRange();
+    if (scoreChart && initialVisibleRange) {
+      scoreChart.timeScale().setVisibleRange(initialVisibleRange);
+    }
   </script>
 </body>
 </html>

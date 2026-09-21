@@ -187,7 +187,7 @@ def test_supabase_rest_lists_market_score_identities_in_a_date_range() -> None:
     request = session.calls[-1]
     assert request["url"].endswith("/rest/v1/market_scores")
     assert request["params"] == {
-        "select": "id,model_version,target_date,calculation_hash",
+        "select": "id,model_version,target_date,status,calculation_hash",
         "order": "target_date.asc,id.asc",
         "limit": "100",
         "model_version": "eq.v0.1",

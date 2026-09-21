@@ -16,6 +16,11 @@ on:
         required: true
         default: false
         type: boolean
+      refresh_unavailable:
+        description: Recalculate dates with an existing unavailable score
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -46,5 +51,8 @@ jobs:
           args=(--start-date "$START_DATE" --end-date "$END_DATE")
           if [[ "${{ inputs.write }}" == "true" ]]; then
             args+=(--write)
+          fi
+          if [[ "${{ inputs.refresh_unavailable }}" == "true" ]]; then
+            args+=(--refresh-unavailable)
           fi
           python -m scripts.backfill_market_scores "${args[@]}"

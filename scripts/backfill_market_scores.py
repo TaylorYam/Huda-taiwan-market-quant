@@ -59,6 +59,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Persist results; without this flag the command is a dry run",
     )
+    parser.add_argument(
+        "--refresh-unavailable",
+        action="store_true",
+        help="Recalculate dates whose existing score status is unavailable",
+    )
     return parser
 
 
@@ -83,6 +88,18 @@ def existing_target_dates(rows: Iterable[Mapping[str, Any]]) -> set[str]:
     }
 
 
+def existing_available_target_dates(rows: Iterable[Mapping[str, Any]]) -> set[str]:
+    """Return dates with an existing usable score, ignoring unavailable rows."""
+
+    return {
+        target_date
+        for row in rows
+        if row.get("status") == "available"
+        and isinstance(target_date := row.get("target_date"), str)
+        and target_date
+    }
+
+
 def summarize_results(
     results: Sequence[DailyScoreResult],
     *,
@@ -90,6 +107,7 @@ def summarize_results(
     end_date: str,
     skipped_existing_dates: int,
     write: bool,
+    refresh_unavailable: bool = False,
     inserted: int = 0,
     duplicates: int = 0,
 ) -> dict[str, Any]:
@@ -110,6 +128,7 @@ def summarize_results(
         "reason_counts": dict(sorted(reason_counts.items())),
         "skipped_existing_dates": skipped_existing_dates,
         "write_mode": write,
+        "refresh_unavailable": refresh_unavailable,
         "inserted": inserted,
         "duplicates": duplicates,
     }
@@ -157,13 +176,14 @@ def main(argv: list[str] | None = None) -> int:
                 end_date=end.isoformat(),
             )
             results = _build_results(rows, start=start, end=end)
-            existing = existing_target_dates(
-                store.list_market_scores(
-                    model_version=MODEL_VERSION,
-                    start_date=start.isoformat(),
-                    end_date=end.isoformat(),
-                )
+            score_rows = store.list_market_scores(
+                model_version=MODEL_VERSION,
+                start_date=start.isoformat(),
+                end_date=end.isoformat(),
             )
+            existing = existing_target_dates(score_rows)
+            if args.refresh_unavailable:
+                existing = existing_available_target_dates(score_rows)
             pending = [
                 result for result in results if result.target_date not in existing
             ]
@@ -183,6 +203,7 @@ def main(argv: list[str] | None = None) -> int:
                     end_date=end.isoformat(),
                     skipped_existing_dates=len(results) - len(pending),
                     write=True,
+                    refresh_unavailable=args.refresh_unavailable,
                     inserted=inserted,
                     duplicates=duplicates,
                 )
@@ -193,6 +214,7 @@ def main(argv: list[str] | None = None) -> int:
                     end_date=end.isoformat(),
                     skipped_existing_dates=len(results) - len(pending),
                     write=False,
+                    refresh_unavailable=args.refresh_unavailable,
                 )
     except Exception:  # noqa: BLE001 - CLI boundary must not print secrets
         print(

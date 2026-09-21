@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from scripts.backfill_market_scores import (
+    existing_available_target_dates,
     existing_target_dates,
     group_observations,
     summarize_results,
@@ -46,6 +47,17 @@ def test_existing_target_dates_include_unavailable_rows() -> None:
             {},
         ]
     ) == {"2026-01-02", "2026-01-03"}
+
+
+def test_existing_available_target_dates_ignore_unavailable_rows() -> None:
+    assert existing_available_target_dates(
+        [
+            {"target_date": "2026-01-02", "status": "unavailable"},
+            {"target_date": "2026-01-03", "status": "available"},
+            {"target_date": None, "status": "available"},
+            {},
+        ]
+    ) == {"2026-01-03"}
 
 
 def test_summary_does_not_turn_unavailable_into_zero() -> None:

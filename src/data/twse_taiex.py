@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from datetime import date, datetime, timezone
@@ -137,22 +138,30 @@ def fetch_taiex_month(
     *,
     http_get: Callable[[str], bytes] | None = None,
     parser_version: str = TAIEX_PARSER_VERSION,
+    sleep: Callable[[float], None] | None = None,
 ) -> list[Observation]:
     """Fetch and parse one month; ``http_get`` is injectable for tests."""
     url = build_taiex_month_url(year, month)
-    try:
-        payload = (http_get or _http_get)(url)
-    except Exception as exc:
-        if isinstance(exc, TAIEXParseError):
+    getter = http_get or _http_get
+    pause = sleep or time.sleep
+    retry_delays = (1.0, 3.0)
+    for attempt in range(len(retry_delays) + 1):
+        try:
+            payload = getter(url)
+            return parse_taiex_payload(
+                payload,
+                source_url=url,
+                source_payload_hash=payload_sha256(payload),
+                parser_version=parser_version,
+                expected_month=f"{year:04d}-{month:02d}",
+            )
+        except TAIEXParseError:
             raise
-        raise TAIEXFetchError(f"TAIEX request failed for {url}") from exc
-    return parse_taiex_payload(
-        payload,
-        source_url=url,
-        source_payload_hash=payload_sha256(payload),
-        parser_version=parser_version,
-        expected_month=f"{year:04d}-{month:02d}",
-    )
+        except Exception as exc:
+            if attempt == len(retry_delays):
+                raise TAIEXFetchError(f"TAIEX request failed for {url}") from exc
+        pause(retry_delays[attempt])
+    raise AssertionError("TAIEX retry loop did not return")
 
 
 def collect_taiex_month(

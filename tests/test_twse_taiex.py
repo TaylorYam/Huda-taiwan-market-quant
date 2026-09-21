@@ -10,6 +10,7 @@ from src.data import (
     build_taiex_month_url,
     collect_taiex_month,
     collect_taiex_range,
+    fetch_taiex_month,
     parse_taiex_payload,
 )
 from src.data.storage import SQLiteObservationStore
@@ -192,10 +193,23 @@ def test_fetch_rejects_response_for_a_different_requested_month():
     document["data"][0][0] = "113/02/01"
     document["data"][1][0] = "113/02/02"
     with pytest.raises(TAIEXParseError, match="requested month"):
-        from src.data.twse_taiex import fetch_taiex_month
-
         fetch_taiex_month(
             2024,
             1,
             http_get=lambda _: json.dumps(document, ensure_ascii=False).encode(),
         )
+
+
+def test_fetch_retries_transient_request_failure():
+    responses = iter([OSError("temporary network failure"), fixture_bytes()])
+    delays = []
+
+    observations = fetch_taiex_month(
+        2024,
+        1,
+        http_get=lambda _: next(responses),
+        sleep=delays.append,
+    )
+
+    assert len(observations) == 2
+    assert delays == [1.0]

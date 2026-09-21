@@ -3,8 +3,8 @@ name: TAIFEX TX daily ingestion
 on:
   workflow_dispatch:
     inputs:
-      year:
-        description: "Optional TX calendar year to backfill"
+      date:
+        description: "Optional Taiwan trading date (YYYY-MM-DD)"
         required: false
         type: string
   schedule:
@@ -24,7 +24,7 @@ jobs:
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
-      TX_YEAR: ${{ inputs.year || '' }}
+      REQUESTED_DATE: ${{ inputs.date || '' }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -45,9 +45,29 @@ jobs:
             exit 1
           fi
 
-      - name: Collect TX year
+      - name: Resolve Taiwan target date
         shell: bash
         run: |
-          args=()
-          if [ -n "${TX_YEAR:-}" ]; then args+=(--year "$TX_YEAR"); fi
-          python -m scripts.collect_taifex_tx "${args[@]}"
+          if [ -z "${REQUESTED_DATE:-}" ]; then
+            export REQUESTED_DATE="$(TZ=Asia/Taipei date +%F)"
+          fi
+          python - <<'PY'
+          import os
+          from datetime import date
+
+          value = os.environ["REQUESTED_DATE"]
+          try:
+              parsed = date.fromisoformat(value)
+          except ValueError as exc:
+              raise SystemExit("date must use YYYY-MM-DD") from exc
+          if parsed.isoformat() != value:
+              raise SystemExit("date must use canonical YYYY-MM-DD")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
+              env_file.write(f"TARGET_DATE={value}\n")
+          print(f"Resolved Taiwan target date: {value}")
+          PY
+
+      - name: Collect TX exact date
+        shell: bash
+        run: |
+          python -m scripts.collect_taifex_tx_day --date "$TARGET_DATE"

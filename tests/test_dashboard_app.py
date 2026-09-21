@@ -6,6 +6,7 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 from src.dashboard.app import (
+    SOURCE_ATTRIBUTION,
     SOURCE_DATASETS,
     build_tradingview_kline_html,
     display_score,
@@ -60,6 +61,11 @@ def test_empty_score_still_displays_source_quality(monkeypatch):
     assert len(app.dataframe[0].value) == 7
     assert set(app.dataframe[0].value["品質狀態"]) == {"empty"}
     assert store.get_latest_source_quality.call_count == 7
+
+
+def test_dashboard_displays_official_source_attribution(monkeypatch):
+    app, _ = run_app(monkeypatch)
+    assert SOURCE_ATTRIBUTION in [item.body for item in app.markdown]
 
 
 def test_source_failure_state_and_timestamp_are_displayed(monkeypatch):

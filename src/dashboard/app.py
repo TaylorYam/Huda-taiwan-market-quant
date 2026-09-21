@@ -28,6 +28,13 @@ SOURCE_DATASETS = {
     "taifex_taiwan_vix_close_v1": "TAIFEX Taiwan VIX",
 }
 
+SOURCE_ATTRIBUTION = (
+    "資料來源："
+    "[臺灣證券交易所 TWSE](https://www.twse.com.tw/)、"
+    "[臺灣期貨交易所 TAIFEX](https://www.taifex.com.tw/)。"
+    "本頁僅展示已儲存的公開資料與評分結果。"
+)
+
 TAIEX_DATASET_ID = "twse_taiex_daily_v1"
 CHART_LIMIT = 1000
 
@@ -765,6 +772,7 @@ def main() -> None:
     st.set_page_config(page_title="Huda｜台指大盤", layout="wide")
     st.title("Huda｜台指大盤")
     st.caption("唯讀展示 · 最新已儲存結果 · 不提供下單或部位建議")
+    st.markdown(SOURCE_ATTRIBUTION)
     st.button("重新整理", help="重新讀取最新已儲存結果與來源狀態")
     url = os.environ.get("SUPABASE_URL", "").strip()
     key = os.environ.get("SUPABASE_SECRET_KEY", "").strip()

@@ -104,6 +104,11 @@ from .taifex_vix import (
     parse_vix_payload,
     parse_vix_range_payload,
 )
+from .touchance_export import (
+    TouchanceExportError,
+    parse_touchance_oi_export,
+    parse_touchance_vix_export,
+)
 from .twse_foreign_cash import (
     FOREIGN_CASH_DATASET_ID,
     FOREIGN_CASH_ENDPOINT,
@@ -212,6 +217,7 @@ __all__ = [
     "TXParseError",
     "VIXFetchError",
     "VIXParseError",
+    "TouchanceExportError",
     "WriteResult",
     "audit_pcr_range",
     "audit_tx_archives",
@@ -262,6 +268,8 @@ __all__ = [
     "parse_tx_payload",
     "parse_vix_payload",
     "parse_vix_range_payload",
+    "parse_touchance_oi_export",
+    "parse_touchance_vix_export",
     "summarize_write_results",
     "validate_observation_export",
 ]

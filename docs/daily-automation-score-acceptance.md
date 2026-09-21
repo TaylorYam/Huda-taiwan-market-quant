@@ -24,11 +24,10 @@ evidence, revisions, duplicate replay, and GET-only dashboard reads.
 
 ## Operational gate outside this code boundary
 
-The current v0.1 documentation describes a manually triggered Actions workflow
-and states that no automatic schedule exists. The application contract is
-ready for a scheduled invocation, but production automation remains pending a
-workflow-level schedule, one-writer/concurrency policy, and a live secret/table
-smoke check. Those changes belong to the workflow/operations workstream.
+The workflow now has a weekday 16:30 Asia/Taipei schedule with the same
+one-writer concurrency policy as manual runs. The application contract and a live
+secret/table smoke check are proven, while backup/restore, access separation,
+secret rotation, quota, and source-term evidence remain release gates in Issue #18.
 
 ## Minimal follow-up if scheduling is enabled
 

@@ -1,7 +1,7 @@
 name: Daily market automation (supervised)
 
-# This workflow is intentionally manual-only until the operational gates in
-# docs/issue-18-operations-runbook-v0.1.md are complete.
+# Manual runs keep explicit inputs; the weekday schedule derives the Taiwan
+# date and cutoff on the runner. Source/date guards still stop an unsafe run.
 on:
   workflow_dispatch:
     inputs:
@@ -18,6 +18,8 @@ on:
         required: true
         default: false
         type: boolean
+  schedule:
+    - cron: "30 8 * * 1-5"
 
 permissions:
   contents: read
@@ -54,6 +56,12 @@ jobs:
         shell: bash
         run: |
           echo "Validate supervised inputs and secrets" > "$RUNNER_TEMP/daily-market-automation-stage.txt"
+          if [[ "${GITHUB_EVENT_NAME:-}" == "schedule" ]]; then
+            export REQUESTED_TARGET_DATE="$(TZ=Asia/Taipei date +%F)"
+            export REQUESTED_AS_OF="$(TZ=Asia/Taipei date --iso-8601=seconds)"
+            export CONFIRM_WRITE=true
+            echo "Scheduled run: target_date=$REQUESTED_TARGET_DATE as_of=$REQUESTED_AS_OF"
+          fi
           if [[ "${CONFIRM_WRITE:-false}" != "true" ]]; then
             echo "::error::Set confirm_write=true to authorize this supervised write run."
             exit 1

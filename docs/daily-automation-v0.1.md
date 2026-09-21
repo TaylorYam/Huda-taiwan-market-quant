@@ -3,15 +3,17 @@
 ## Status
 
 The workflow [`daily-market-automation.yml`](../.github/workflows/daily-market-automation.yml)
-is a supervised, manual-only entry point. It is intentionally not scheduled yet.
-Issue #18 still has outstanding backup/restore, access-separation, secret-rotation,
-quota, and source-attribution work. A successful manual run is evidence that one
-explicit input window completed; it is not approval for unattended production writes.
+supports both explicit manual runs and a weekday schedule at 16:30 Asia/Taipei
+(`30 8 * * 1-5` in GitHub Actions UTC). The schedule derives the current Taiwan
+date and cutoff on the runner and acknowledges the write internally. Issue #18
+still has outstanding backup/restore, access-separation, secret-rotation, quota,
+and source-attribution work, so enabling this trigger is not approval for a final
+production release.
 
 ## Run contract
 
-An operator starts **Actions → Daily market automation (supervised) → Run workflow**
-with:
+For a manual run, an operator starts **Actions → Daily market automation
+(supervised) → Run workflow** with:
 
 - `target_date`: the explicit Taiwan market date in canonical `YYYY-MM-DD` form;
 - `as_of`: an ISO-8601 timestamp with a timezone, normally entered in
@@ -19,9 +21,11 @@ with:
 - `confirm_write=true`, an explicit acknowledgement that the run may write source
   observations and the derived Market Score.
 
-The workflow normalizes `as_of` to `Asia/Taipei` before invoking the score runner,
-rejects a target date after the Taiwan as-of date, and passes the same target date
-to the date-specific collectors. Repeating a run with the same inputs is supported:
+The scheduled path sets `target_date` to the current `Asia/Taipei` date and `as_of`
+to the current timezone-aware cutoff before applying the same validation. Both paths
+normalize `as_of` to `Asia/Taipei`, reject a target date after the Taiwan as-of date,
+and pass the same target date to the date-specific collectors. Repeating a run with
+the same inputs is supported:
 the existing observation and Market Score writers preserve duplicate detection and
 revision lineage.
 
@@ -60,9 +64,10 @@ the requested target. A historical manual rerun can therefore collect rows outsi
 the requested date for the month-based sources, or stop when the latest snapshot
 does not match. This is why the workflow requires explicit inputs and remains
 supervised.
-The workflow does not infer a prior trading day when an exchange is closed; the
-requested `target_date` stays explicit and missing source evidence remains
-unavailable.
+The workflow does not infer a prior trading day when an exchange is closed. A
+weekday schedule on a Taiwan holiday therefore stops at the source/date guards
+without publishing a misleading score; a manual rerun can use the last confirmed
+trading date.
 
 The workflow is not a transactional boundary across the source writes and score
 write. If a later source or scoring step fails, earlier successful writes remain
@@ -84,12 +89,10 @@ collector or the score CLI; source scripts and the score CLI retain their existi
 secret-safe error boundaries. Earlier successful source writes may remain durable,
 so reruns should use the same explicit inputs after the cause is addressed.
 
-## Opening an unattended schedule
+## Schedule operation
 
-Before adding a `schedule` trigger, the owner should update Issue #18 with dated
-evidence for the remaining operational gates, verify continuous trading-day runs,
-and decide how to handle the institutional latest-snapshot date-alignment limit. The
-change should then add a timezone-safe schedule and a monitored failure path only after
-the remote schema, backup/restore, access separation, rotation, quota, and source
-terms conditions are accepted. Until then, keep this workflow manual-only and use
-`confirm_write` as the human supervision boundary.
+The weekday schedule intentionally skips the prior three-trading-day observation
+gate. The one-writer concurrency group, strict source/date guards, bounded source
+retries, and failure summary remain active. Backup/restore, access separation,
+secret rotation, quota, and source-term evidence remain release gates tracked in
+Issue #18 and are handled separately.

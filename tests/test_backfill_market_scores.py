@@ -83,3 +83,5 @@ def test_summary_does_not_turn_unavailable_into_zero() -> None:
     assert summary["available_days"] == 0
     assert summary["unavailable_days"] == 1
     assert summary["reason_counts"] == {"missing_or_unavailable_required_factors": 1}
+    assert summary["missing_factor_counts"]
+    assert summary["unavailable_samples"][0]["target_date"] == "2026-01-02"

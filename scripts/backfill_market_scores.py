@@ -117,6 +117,25 @@ def summarize_results(
     reason_counts = Counter(
         result.market_score.reason for result in results if result.market_score.reason
     )
+    missing_factor_counts = Counter(
+        factor_id
+        for result in results
+        for factor_id in result.market_score.missing_factor_ids
+    )
+    unavailable_samples = [
+        {
+            "target_date": result.target_date,
+            "missing_factor_ids": list(result.market_score.missing_factor_ids),
+            "factor_reasons": {
+                factor_id: result.factor_scores[factor_id].reason
+                for factor_id in result.market_score.missing_factor_ids
+                if factor_id in result.factor_scores
+                and result.factor_scores[factor_id].reason
+            },
+        }
+        for result in results
+        if result.status == "unavailable"
+    ][:10]
     return {
         "model_version": MODEL_VERSION,
         "start_date": start_date,
@@ -126,6 +145,8 @@ def summarize_results(
         "unavailable_days": status_counts.get("unavailable", 0),
         "status_counts": dict(sorted(status_counts.items())),
         "reason_counts": dict(sorted(reason_counts.items())),
+        "missing_factor_counts": dict(sorted(missing_factor_counts.items())),
+        "unavailable_samples": unavailable_samples,
         "skipped_existing_dates": skipped_existing_dates,
         "write_mode": write,
         "refresh_unavailable": refresh_unavailable,

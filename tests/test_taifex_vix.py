@@ -108,6 +108,37 @@ def test_collector_writes_month_through_observation_store():
         assert observation.dataset_id == "taifex_taiwan_vix_close_v1"
 
 
+def test_collect_vix_month_is_idempotent_and_links_revision():
+    with SQLiteObservationStore(":memory:") as store:
+        first = collect_vix_month(
+            store,
+            2026,
+            9,
+            http_get=lambda url: sample_payload(),
+        )
+        duplicate = collect_vix_month(
+            store,
+            2026,
+            9,
+            http_get=lambda url: sample_payload(),
+        )
+        revised_payload = sample_payload().replace(b"27.29", b"28.29", 1)
+        revised = collect_vix_month(
+            store,
+            2026,
+            9,
+            http_get=lambda url: revised_payload,
+        )
+        current = store.get_observation(revised[0].observation_id)
+
+    assert first[0].action == "inserted"
+    assert duplicate[0].action == "duplicate"
+    assert revised[0].action == "inserted"
+    assert current is not None
+    assert current.supersedes_id == first[0].observation_id
+    assert current.values["close"] == 28.29
+
+
 def test_parse_vix_range_payload_creates_daily_observations_without_avg():
     payload = range_payload(("20231002", 13.99), ("20231003", 14.97))
 

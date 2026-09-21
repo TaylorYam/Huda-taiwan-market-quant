@@ -216,7 +216,7 @@ class SupabaseRestObservationStore:
         if start_date is not None and end_date is not None and start_date > end_date:
             raise ValueError("start_date must not be after end_date")
         params: dict[str, Any] = {
-            "select": "id,model_version,target_date,calculation_hash",
+            "select": "id,model_version,target_date,status,calculation_hash",
             "order": "target_date.asc,id.asc",
             "limit": str(limit),
         }

@@ -8,6 +8,10 @@ on:
         required: true
         default: false
         type: boolean
+      expected_date:
+        description: "Expected official observation date when write=true (YYYY-MM-DD)"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -24,6 +28,7 @@ jobs:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       WRITE_SNAPSHOT: ${{ inputs.write || false }}
+      EXPECTED_DATE: ${{ inputs.expected_date || '' }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -45,9 +50,33 @@ jobs:
             exit 1
           fi
 
+      - name: Validate expected date guard
+        shell: bash
+        run: |
+          if [ "${WRITE_SNAPSHOT:-false}" = "true" ] && [ -z "${EXPECTED_DATE:-}" ]; then
+            echo "::error::expected_date is required when write=true."
+            exit 1
+          fi
+          if [ -n "${EXPECTED_DATE:-}" ]; then
+            python - <<'PY'
+            import os
+            from datetime import date
+
+            value = os.environ["EXPECTED_DATE"]
+            try:
+                parsed = date.fromisoformat(value)
+            except ValueError as exc:
+                raise SystemExit("expected_date must use YYYY-MM-DD") from exc
+            if parsed.isoformat() != value:
+                raise SystemExit("expected_date must use canonical YYYY-MM-DD")
+            print(f"Expected official observation date: {value}")
+            PY
+          fi
+
       - name: Fetch official snapshot
         shell: bash
         run: |
           args=()
           if [ "${WRITE_SNAPSHOT:-false}" = "true" ]; then args+=(--write); fi
+          if [ -n "${EXPECTED_DATE:-}" ]; then args+=(--expected-date "$EXPECTED_DATE"); fi
           python -m scripts.collect_taifex_institutional "${args[@]}"

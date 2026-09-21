@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import gzip
 import hashlib
 import io
 import json
@@ -22,7 +23,7 @@ INSTITUTIONAL_FUTURES_ENDPOINT = (
     "https://openapi.taifex.com.tw/v1/"
     "MarketDataOfMajorInstitutionalTradersDetailsOfFuturesContractsBytheDate"
 )
-INSTITUTIONAL_FUTURES_PARSER_VERSION = "taifex-institutional-futures-oi-json@0.2"
+INSTITUTIONAL_FUTURES_PARSER_VERSION = "taifex-institutional-futures-oi-json@0.3"
 INSTITUTIONAL_FUTURES_SOURCE_NAME = "TAIFEX"
 INSTITUTIONAL_FUTURES_SOURCE_RECORD_KEY = "TX:foreign:institutional"
 
@@ -398,16 +399,23 @@ def _normalize_slash_date(value: str) -> str:
 
 
 def _decode_institutional_json(payload: bytes) -> object:
-    """Decode the endpoint's JSON across the encodings used by TAIFEX."""
+    """Decode the endpoint's JSON across common transport variants."""
 
     errors: list[UnicodeDecodeError | json.JSONDecodeError] = []
-    for encoding in ("utf-8-sig", "cp950"):
+    candidates = [payload]
+    if payload.startswith(b"\x1f\x8b"):
         try:
-            return json.loads(payload.decode(encoding))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            errors.append(exc)
+            candidates.insert(0, gzip.decompress(payload))
+        except OSError:
+            pass
+    for candidate in candidates:
+        for encoding in ("utf-8-sig", "cp950", "utf-16"):
+            try:
+                return json.loads(candidate.decode(encoding))
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                errors.append(exc)
     raise InstitutionalFuturesParseError(
-        "institutional futures response is not valid UTF-8 or CP950 JSON"
+        "institutional futures response is not valid JSON in supported encodings"
     ) from errors[-1]
 
 

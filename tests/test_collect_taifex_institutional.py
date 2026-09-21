@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import json
 from typing import Self
 
@@ -48,6 +49,14 @@ def test_fetch_retries_transient_non_json_response() -> None:
 
     assert observations[0].observation_date == "2026-09-16"
     assert delays == [1.0]
+
+
+def test_gzip_json_payload_is_supported() -> None:
+    compressed = gzip.compress(payload())
+
+    [observation] = parse_institutional_futures_payload(compressed)
+
+    assert observation.observation_date == "2026-09-16"
 
 
 def test_expected_date_match_passes() -> None:

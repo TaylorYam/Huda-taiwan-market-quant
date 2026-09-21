@@ -38,4 +38,3 @@ Serialize invocations for one target/model, retain a failed run as an error,
 and alert when no `market_scores` row is produced. A successful run may still
 have `status=unavailable`; that state is a persisted data-quality result and
 must remain visible in the dashboard.
-

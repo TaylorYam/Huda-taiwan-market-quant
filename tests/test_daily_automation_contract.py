@@ -56,4 +56,3 @@ def test_daily_runner_contract_preserves_explicit_window_and_unavailable_result(
     assert summary["action"] == "inserted"
     assert writer.records[0]["status"] == "unavailable"
     assert writer.records[0]["score"] is None
-

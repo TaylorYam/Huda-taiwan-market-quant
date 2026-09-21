@@ -7,6 +7,7 @@ import hashlib
 import io
 import json
 import math
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import replace
 from datetime import date, datetime, timezone
@@ -130,26 +131,35 @@ def fetch_institutional_futures_latest(
     *,
     http_get: Callable[[str], bytes] | None = None,
     parser_version: str = INSTITUTIONAL_FUTURES_PARSER_VERSION,
+    sleep: Callable[[float], None] | None = None,
 ) -> list[Observation]:
     """Fetch and parse the latest official daily snapshot."""
 
-    try:
-        payload = (http_get or _http_get)(INSTITUTIONAL_FUTURES_ENDPOINT)
-    except Exception as exc:
-        if isinstance(exc, InstitutionalFuturesParseError):
-            raise
-        raise InstitutionalFuturesFetchError(
-            "institutional futures snapshot request failed"
-        ) from exc
-    if not isinstance(payload, bytes):
-        raise InstitutionalFuturesFetchError(
-            "institutional futures response is not bytes"
-        )
-    return parse_institutional_futures_payload(
-        payload,
-        source_payload_hash=payload_sha256(payload),
-        parser_version=parser_version,
-    )
+    getter = http_get or _http_get
+    pause = sleep or time.sleep
+    retry_delays = (1.0, 3.0)
+    for attempt in range(len(retry_delays) + 1):
+        try:
+            payload = getter(INSTITUTIONAL_FUTURES_ENDPOINT)
+            if not isinstance(payload, bytes):
+                raise InstitutionalFuturesFetchError(
+                    "institutional futures response is not bytes"
+                )
+            return parse_institutional_futures_payload(
+                payload,
+                source_payload_hash=payload_sha256(payload),
+                parser_version=parser_version,
+            )
+        except InstitutionalFuturesParseError:
+            if attempt == len(retry_delays):
+                raise
+        except Exception as exc:
+            if attempt == len(retry_delays):
+                raise InstitutionalFuturesFetchError(
+                    "institutional futures snapshot request failed"
+                ) from exc
+        pause(retry_delays[attempt])
+    raise AssertionError("institutional futures retry loop did not return")
 
 
 def collect_institutional_futures_latest(
@@ -484,6 +494,7 @@ def _http_get(url: str) -> bytes:
         url,
         headers={
             "Accept": "application/json",
+            "Accept-Encoding": "identity",
             "User-Agent": "HudaTaiwanQuant/0.1",
         },
     )

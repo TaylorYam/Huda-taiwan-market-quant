@@ -4,7 +4,10 @@ import json
 from typing import Self
 
 from scripts import collect_taifex_institutional as collector
-from src.data.taifex_institutional import parse_institutional_futures_payload
+from src.data.taifex_institutional import (
+    fetch_institutional_futures_latest,
+    parse_institutional_futures_payload,
+)
 
 
 def payload(trade_date: str = "20260916", *, encoding: str = "utf-8") -> bytes:
@@ -32,6 +35,19 @@ def test_cp950_json_payload_is_supported() -> None:
 
     assert observation.observation_date == "2026-09-16"
     assert observation.values["open_interest_net"] == -76351
+
+
+def test_fetch_retries_transient_non_json_response() -> None:
+    responses = iter([b"temporarily unavailable", payload(encoding="cp950")])
+    delays: list[float] = []
+
+    observations = fetch_institutional_futures_latest(
+        http_get=lambda _url: next(responses),
+        sleep=delays.append,
+    )
+
+    assert observations[0].observation_date == "2026-09-16"
+    assert delays == [1.0]
 
 
 def test_expected_date_match_passes() -> None:

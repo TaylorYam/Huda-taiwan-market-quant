@@ -23,7 +23,7 @@ INSTITUTIONAL_FUTURES_ENDPOINT = (
     "https://openapi.taifex.com.tw/v1/"
     "MarketDataOfMajorInstitutionalTradersDetailsOfFuturesContractsBytheDate"
 )
-INSTITUTIONAL_FUTURES_PARSER_VERSION = "taifex-institutional-futures-oi-json@0.3"
+INSTITUTIONAL_FUTURES_PARSER_VERSION = "taifex-institutional-futures-oi-json-csv@0.4"
 INSTITUTIONAL_FUTURES_SOURCE_NAME = "TAIFEX"
 INSTITUTIONAL_FUTURES_SOURCE_RECORD_KEY = "TX:foreign:institutional"
 
@@ -44,6 +44,23 @@ INSTITUTIONAL_FUTURES_RANGE_PARSER_VERSION = (
     "taifex-institutional-futures-oi-range-csv@0.1"
 )
 _RANGE_INSTITUTIONS = {"外資及陸資", "外資"}
+_INSTITUTIONAL_CSV_HEADER = (
+    "日期",
+    "商品名稱",
+    "身份別",
+    "多方交易口數",
+    "多方交易契約金額(千元)",
+    "空方交易口數",
+    "空方交易契約金額(千元)",
+    "多空交易口數淨額",
+    "多空交易契約金額淨額(千元)",
+    "多方未平倉口數",
+    "多方未平倉契約金額(千元)",
+    "空方未平倉口數",
+    "空方未平倉契約金額(千元)",
+    "多空未平倉口數淨額",
+    "多空未平倉契約金額淨額(千元)",
+)
 
 
 class InstitutionalFuturesFetchError(RuntimeError):
@@ -74,7 +91,20 @@ def parse_institutional_futures_payload(
         raise InstitutionalFuturesParseError(
             "institutional futures payload hash does not match response"
         )
-    raw_rows = _decode_institutional_json(payload)
+    try:
+        raw_rows = _decode_institutional_json(payload)
+    except InstitutionalFuturesParseError as json_error:
+        try:
+            return _parse_institutional_futures_csv_payload(
+                payload,
+                source_url=source_url,
+                source_payload_hash=source_payload_hash or computed_hash,
+                retrieved_at=retrieved_at,
+                ingested_at=ingested_at,
+                parser_version=parser_version,
+            )
+        except InstitutionalFuturesParseError as csv_error:
+            raise csv_error from json_error
     if not isinstance(raw_rows, list):
         raise InstitutionalFuturesParseError(
             "institutional futures response is not a list"
@@ -223,23 +253,7 @@ def parse_institutional_futures_range_payload(
     if not rows:
         return []
     header, *data_rows = rows
-    expected_header = [
-        "日期",
-        "商品名稱",
-        "身份別",
-        "多方交易口數",
-        "多方交易契約金額(千元)",
-        "空方交易口數",
-        "空方交易契約金額(千元)",
-        "多空交易口數淨額",
-        "多空交易契約金額淨額(千元)",
-        "多方未平倉口數",
-        "多方未平倉契約金額(千元)",
-        "空方未平倉口數",
-        "空方未平倉契約金額(千元)",
-        "多空未平倉口數淨額",
-        "多空未平倉契約金額淨額(千元)",
-    ]
+    expected_header = list(_INSTITUTIONAL_CSV_HEADER)
     if [column.strip() for column in header] != expected_header:
         raise InstitutionalFuturesParseError(
             "institutional futures range response has an unexpected header"
@@ -396,6 +410,111 @@ def _normalize_slash_date(value: str) -> str:
         raise InstitutionalFuturesParseError(
             f"invalid official date {value!r}"
         ) from exc
+
+
+def _parse_institutional_futures_csv_payload(
+    payload: bytes,
+    *,
+    source_url: str,
+    source_payload_hash: str,
+    retrieved_at: str | None,
+    ingested_at: str | None,
+    parser_version: str,
+) -> list[Observation]:
+    """Parse the official CSV variant returned by some TAIFEX edge nodes."""
+
+    rows = _decode_institutional_futures_csv(payload)
+    if not rows:
+        raise InstitutionalFuturesParseError(
+            "institutional futures CSV response is empty"
+        )
+    _, *data_rows = rows
+    candidates: list[list[str]] = []
+    for line_number, row in enumerate(data_rows, start=2):
+        if not row or not row[0].strip():
+            continue
+        if len(row) != len(_INSTITUTIONAL_CSV_HEADER):
+            raise InstitutionalFuturesParseError(
+                f"institutional futures CSV row {line_number} has "
+                f"{len(row)} columns, expected {len(_INSTITUTIONAL_CSV_HEADER)}"
+            )
+        if row[1].strip() not in {"臺股期貨", "TX", "TXF"}:
+            continue
+        if row[2].strip() not in _RANGE_INSTITUTIONS:
+            continue
+        candidates.append(row)
+    if len(candidates) != 1:
+        raise InstitutionalFuturesParseError(
+            "expected exactly one foreign TX futures row in official CSV snapshot"
+        )
+    row = candidates[0]
+    source_date = row[0].strip()
+    observation_date = _normalize_csv_date(source_date)
+    values = {
+        "contract_code": row[1].strip(),
+        "institution": row[2].strip(),
+        "trading_volume_long": _range_number(row[3], "trading_volume_long"),
+        "trading_volume_short": _range_number(row[5], "trading_volume_short"),
+        "trading_volume_net": _range_number(row[7], "trading_volume_net"),
+        "open_interest_long": _range_number(row[9], "open_interest_long"),
+        "open_interest_short": _range_number(row[11], "open_interest_short"),
+        "open_interest_net": _range_number(row[13], "open_interest_net"),
+        "open_interest_net_value_thousands": _range_number(
+            row[14], "open_interest_net_value_thousands"
+        ),
+        "unit": "contracts",
+    }
+    return [
+        Observation(
+            dataset_id=INSTITUTIONAL_FUTURES_DATASET_ID,
+            schema_version="0.1",
+            observation_date=observation_date,
+            source_date=source_date,
+            source_name=INSTITUTIONAL_FUTURES_SOURCE_NAME,
+            source_url=source_url,
+            source_record_key=INSTITUTIONAL_FUTURES_SOURCE_RECORD_KEY,
+            retrieved_at=retrieved_at or _utc_now(),
+            ingested_at=ingested_at or _utc_now(),
+            source_payload_hash=source_payload_hash,
+            parser_version=parser_version,
+            values=values,
+            quality_status="available",
+            publication_label="latest",
+        )
+    ]
+
+
+def _decode_institutional_futures_csv(payload: bytes) -> list[list[str]]:
+    """Decode the official table across UTF-8 BOM and legacy encodings."""
+
+    decoded_text = False
+    for encoding in ("utf-8-sig", "cp950", "utf-16"):
+        try:
+            text = payload.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+        decoded_text = True
+        stripped = text.strip()
+        if not stripped:
+            return []
+        rows = list(csv.reader(io.StringIO(stripped)))
+        if rows and [column.strip() for column in rows[0]] == list(
+            _INSTITUTIONAL_CSV_HEADER
+        ):
+            return rows
+    if not decoded_text:
+        raise InstitutionalFuturesParseError(
+            "institutional futures CSV response is not valid text"
+        )
+    raise InstitutionalFuturesParseError(
+        "institutional futures CSV response has an unexpected header"
+    )
+
+
+def _normalize_csv_date(value: str) -> str:
+    if "/" in value:
+        return _normalize_slash_date(value)
+    return _normalize_date(value)
 
 
 def _decode_institutional_json(payload: bytes) -> object:

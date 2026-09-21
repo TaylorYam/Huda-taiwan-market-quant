@@ -63,6 +63,19 @@ def test_parse_institutional_futures_payload_selects_foreign_tx_row() -> None:
     assert observation.quality_status == "available"
 
 
+def test_parse_latest_accepts_utf8_bom_csv_payload() -> None:
+    csv_payload = (
+        "\ufeff" + _RANGE_HEADER + "\r\n" + foreign_row("2026/09/18") + "\r\n"
+    ).encode("utf-8")
+
+    [observation] = parse_institutional_futures_payload(csv_payload)
+
+    assert observation.observation_date == "2026-09-18"
+    assert observation.source_date == "2026/09/18"
+    assert observation.values["open_interest_net"] == -7012
+    assert observation.publication_label == "latest"
+
+
 def test_parse_requires_exactly_one_foreign_tx_row() -> None:
     with pytest.raises(InstitutionalFuturesParseError, match="exactly one"):
         parse_institutional_futures_payload(

@@ -39,7 +39,7 @@ collection:
 1. TAIEX month (`target_date` year and month)
 2. TWSE BFI82U foreign cash day (`target_date`)
 3. TWSE FMTQIK market turnover month (`target_date` year and month)
-4. TAIFEX TX annual archive (`target_date` year)
+4. TAIFEX TX day (`target_date`)
 5. TAIFEX PCR day (`target_date`)
 6. TAIFEX VIX month (`target_date` year and month)
 7. TAIFEX foreign TX open-interest latest snapshot
@@ -52,11 +52,14 @@ create or alter the Supabase schema.
 ## Known v0.1 limits
 
 The existing collector interfaces do not all have a single-day contract. TAIEX,
-FMTQIK, and VIX collect a whole month; TX collects a whole year; and the
-institutional futures command only exposes the latest official snapshot. Therefore
-an historical manual rerun can collect rows outside the requested date, and the
-latest institutional snapshot may be newer than `as_of` and be excluded by the
-runner. This is why the workflow requires explicit inputs and remains supervised.
+FMTQIK, and VIX collect a whole month, while the TX daily endpoint now collects
+the exact requested date. The institutional futures command still exposes only the
+latest official snapshot; the workflow passes `--expected-date` so a snapshot for
+another date fails before persistence instead of being silently associated with
+the requested target. A historical manual rerun can therefore collect rows outside
+the requested date for the month-based sources, or stop when the latest snapshot
+does not match. This is why the workflow requires explicit inputs and remains
+supervised.
 The workflow does not infer a prior trading day when an exchange is closed; the
 requested `target_date` stays explicit and missing source evidence remains
 unavailable.
@@ -68,18 +71,25 @@ the resulting score's target date, as-of, status, and factor coverage.
 
 ## Failure handling
 
-The final step writes a short GitHub Actions job summary on failure containing the
-requested input window and the sequential-stop behavior. It does not include
-credentials, source payloads, or raw transport errors. The failed step's log is the
-place to identify which source or score command stopped the run; source scripts and
-the score CLI are responsible for their existing secret-safe error boundaries.
+Each successful collector appends a job-summary section with its source name,
+requested `target_date`, collection window, and completion result. The score step
+adds its normalized `as_of` boundary. A small runner-local stage marker is written
+before every source and score command, so the final failure summary identifies the
+last stage that started as well as the requested input window. A failed collector
+does not append its completion section, and the score step is skipped.
+
+The failure summary does not include credentials, source payloads, or raw transport
+errors. The failed step's log is the place to inspect the bounded error from that
+collector or the score CLI; source scripts and the score CLI retain their existing
+secret-safe error boundaries. Earlier successful source writes may remain durable,
+so reruns should use the same explicit inputs after the cause is addressed.
 
 ## Opening an unattended schedule
 
 Before adding a `schedule` trigger, the owner should update Issue #18 with dated
 evidence for the remaining operational gates, verify continuous trading-day runs,
-and decide how to handle the institutional latest-snapshot limitation. The change
-should then add a timezone-safe schedule and a monitored failure path only after
+and decide how to handle the institutional latest-snapshot date-alignment limit. The
+change should then add a timezone-safe schedule and a monitored failure path only after
 the remote schema, backup/restore, access separation, rotation, quota, and source
 terms conditions are accepted. Until then, keep this workflow manual-only and use
 `confirm_write` as the human supervision boundary.

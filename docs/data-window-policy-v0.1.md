@@ -154,7 +154,7 @@ Model B：移除限制資料長度的因子，較長歷史
 
 ---
 
-## 目前現況（2026-09-18 更新）：實際回補已完成，正式回測仍未就緒
+## 目前現況（2026-09-21 更新）：展示用回補完成，正式回測仍未就緒
 
 Taiwan VIX 與法人期貨 OI（外資台指期淨部位、淨部位 5 日變化兩個因子的資料源）已有免費的日期查詢端點：
 
@@ -168,28 +168,30 @@ Taiwan VIX 與法人期貨 OI（外資台指期淨部位、淨部位 5 日變化
 設計的前提下不可達。窗口會持續往前捲動，延後回補會失去較早資料。
 
 一次性回補邏輯已實作於 `fetch_vix_range`／`fetch_institutional_futures_range`，
-並由 `scripts/backfill_free_factor_range.py` 將免費來源寫入 Supabase。2026-09-18
-的唯讀覆蓋率報告（GitHub Actions run #2）得到以下可用日期範圍：
+並由 `scripts/backfill_free_factor_range.py` 將免費來源寫入 Supabase。2026-09-21
+的覆蓋率報告，以展示回放區間 `2023-09-25..2026-09-18` 檢查到以下可用日期範圍：
 
 | dataset | 可用日期數 | 日期範圍 |
 |---|---:|---|
-| `twse_taiex_daily_v1` | 729 | 2023-09-18..2026-09-17 |
-| `taifex_txo_oi_pcr_v1` | 729 | 2023-09-18..2026-09-17 |
-| `taifex_tx_daily_contract_v1` | 729 | 2023-09-18..2026-09-17 |
-| `taifex_taiwan_vix_close_v1` | 729 | 2023-09-18..2026-09-17 |
-| `taifex_institutional_futures_oi_v1` | 729 | 2023-09-18..2026-09-17 |
-| `twse_foreign_cash_bfi82u_v1` | 728 | 2023-09-18..2026-09-17 |
-| `twse_market_turnover_fmtqik_v1` | 729 | 2023-09-18..2026-09-17 |
+| `twse_taiex_daily_v1` | 725 | 2023-09-25..2026-09-18 |
+| `taifex_txo_oi_pcr_v1` | 725 | 2023-09-25..2026-09-18 |
+| `taifex_tx_daily_contract_v1` | 725 | 2023-09-25..2026-09-18 |
+| `taifex_taiwan_vix_close_v1` | 725 | 2023-09-25..2026-09-18 |
+| `taifex_institutional_futures_oi_v1` | 725 | 2023-09-25..2026-09-18 |
+| `twse_foreign_cash_bfi82u_v1` | 725 | 2023-09-25..2026-09-18 |
+| `twse_market_turnover_fmtqik_v1` | 725 | 2023-09-25..2026-09-18 |
 
-因此 `raw_common_start=2023-09-18`。TX 年檔目前仍只列到 2025；2026 年度年檔尚未
-提供，但已由官方日期查詢頁補齊 2026-01-01..2026-09-17 的 172 個交易日，覆蓋率報告
-確認 TX 已與共同窗口對齊。外資現貨有一個交易日缺列，不能以零值或中性值補齊，評分
-時仍須依資料契約標為不可用。
+rolling sources can reach 2023-09-18, but the institutional OI source cannot provide an
+earlier usable row for the first scored date. TAIEX July–September 2023 was separately
+added as MA60 warm-up data. TX 年檔目前仍只列到 2025；2026 年度年檔尚未提供，但已由
+官方日期查詢頁補齊 2026-01-01..2026-09-18 的交易日。2025-08-25 的外資現貨缺列已
+補回；缺資料不以零值或中性值替代。
 
-報告同時計算 `earliest_percentile_ready_date=2026-09-18`，且
-`backtest_ready=False (max percentile window 3 years)`。由於目前資料終點是
-2026-09-17，三年百分位暖機尚未留下可宣告的正式訊號日；TX 的 2026 缺口已由官方
-日級來源補齊，後續只需維持每日增量更新。
+展示用 Market Score 回放在 725 個候選日中有 724 天可用；2023-09-25 僅缺
+`foreign_tx_net_position_5d_change`，原因是免費 rolling window 沒有更早的法人 OI，
+不安全地補值。`earliest_percentile_ready_date` 仍為 2026-09-25，且
+`backtest_ready=False (max percentile window 3 years)`；因此這批分數可供 dashboard
+展示，不能當作正式回測有效性證據。
 
 外資現貨因子已通過 BFI82U／FMTQIK 口徑查證，`FOREIGN_CASH_VERIFIED_START` 設為
 2010-01-01；計算仍要求兩個來源都有完整 5 個交易日的可用窗口，不以 T86 或零值

@@ -7,9 +7,6 @@ on:
         description: "Optional Taiwan trading date (YYYY-MM-DD)"
         required: false
         type: string
-  schedule:
-    - cron: "0 8 * * 1-5"
-
 permissions:
   contents: read
 

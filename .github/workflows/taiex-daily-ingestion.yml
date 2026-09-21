@@ -11,9 +11,6 @@ on:
         description: "Optional TAIEX calendar month to backfill (1-12)"
         required: false
         type: string
-  schedule:
-    - cron: "0 8 * * 1-5"
-
 permissions:
   contents: read
 

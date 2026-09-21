@@ -24,10 +24,11 @@ evidence, revisions, duplicate replay, and GET-only dashboard reads.
 
 ## Operational gate outside this code boundary
 
-The workflow now has a weekday 16:30 Asia/Taipei schedule with the same
-one-writer concurrency policy as manual runs. The application contract and a live
-secret/table smoke check are proven, while backup/restore, access separation,
-secret rotation, quota, and source-term evidence remain release gates in Issue #18.
+The workflow now has weekday 16:30 and 22:00 Asia/Taipei scheduled passes with
+the same one-writer concurrency policy as manual runs. The later pass confirms
+late or revised source data. The application contract and a live secret/table
+smoke check are proven, while backup/restore, access separation, secret rotation,
+quota, and source-term evidence remain release gates in Issue #18.
 
 ## Minimal follow-up if scheduling is enabled
 

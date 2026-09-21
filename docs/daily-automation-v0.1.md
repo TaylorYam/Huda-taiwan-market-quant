@@ -3,9 +3,11 @@
 ## Status
 
 The workflow [`daily-market-automation.yml`](../.github/workflows/daily-market-automation.yml)
-supports both explicit manual runs and a weekday schedule at 16:30 Asia/Taipei
-(`30 8 * * 1-5` in GitHub Actions UTC). The schedule derives the current Taiwan
-date and cutoff on the runner and acknowledges the write internally. Issue #18
+supports both explicit manual runs and two weekday scheduled passes at 16:30 and
+22:00 Asia/Taipei (`30 8` and `0 14` in GitHub Actions UTC). The schedule derives
+the current Taiwan date and cutoff on the runner and acknowledges the write
+internally. The later pass is a confirmation run for delayed or revised official
+data. Issue #18
 still has outstanding backup/restore, access-separation, secret-rotation, quota,
 and source-attribution work, so enabling this trigger is not approval for a final
 production release.
@@ -92,7 +94,10 @@ so reruns should use the same explicit inputs after the cause is addressed.
 ## Schedule operation
 
 The weekday schedule intentionally skips the prior three-trading-day observation
-gate. The one-writer concurrency group, strict source/date guards, bounded source
-retries, and failure summary remain active. Backup/restore, access separation,
-secret rotation, quota, and source-term evidence remain release gates tracked in
-Issue #18 and are handled separately.
+gate. The 16:30 pass is the first collection; the 22:00 pass repeats the same
+target-date collection as a confirmation for late or revised source data. The
+one-writer concurrency group, strict source/date guards, bounded source retries,
+and failure summary remain active. Source observations are idempotent; a later
+cutoff can create a new auditable Market Score revision when the evidence changes.
+Backup/restore, access separation, secret rotation, quota, and source-term evidence
+remain release gates tracked in Issue #18 and are handled separately.

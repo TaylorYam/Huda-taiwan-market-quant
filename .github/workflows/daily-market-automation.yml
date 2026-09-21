@@ -19,7 +19,10 @@ on:
         default: false
         type: boolean
   schedule:
+    # First pass after the main sources normally publish.
     - cron: "30 8 * * 1-5"
+    # Confirmation pass for delayed or revised official data.
+    - cron: "0 14 * * 1-5"
 
 permissions:
   contents: read

@@ -133,7 +133,7 @@ Supabase Free 不提供可依賴的 managed automatic backup 或 PITR，因此�
 
 現有來源研究已指出，TWSE E-Shop 資料有自動化與使用條款限制，TAIFEX 歷史資料商品也有各自的申購與使用邊界；這些文件中的公開資料探測結果不等於取得付費資料授權。參考 [`data-availability-probe-v0.1.md`](data-availability-probe-v0.1.md) 與 [`phase0-taifex-history-v0.1.md`](phase0-taifex-history-v0.1.md)。
 
-目前新增的 [`taifex-institutional-daily-ingestion.yml`](../.github/workflows/taifex-institutional-daily-ingestion.yml) 只有 `workflow_dispatch`，預設為唯讀探測；只有操作者明確勾選寫入並通過 secret 檢查時才會寫入 Supabase。完整的 [`daily-market-automation.yml`](../.github/workflows/daily-market-automation.yml) 已加入平日 16:30 Asia/Taipei 排程，會在 Runner 上產生當日日期與 cutoff；institutional collector 仍由完整流程的日期閘門保護。這不代表 Issue #18 的備份、還原、權限、輪替、配額與來源條款 gates 已完成。
+目前新增的 [`taifex-institutional-daily-ingestion.yml`](../.github/workflows/taifex-institutional-daily-ingestion.yml) 只有 `workflow_dispatch`，預設為唯讀探測；只有操作者明確勾選寫入並通過 secret 檢查時才會寫入 Supabase。完整的 [`daily-market-automation.yml`](../.github/workflows/daily-market-automation.yml) 已加入平日 16:30 與 22:00 Asia/Taipei 排程，會在 Runner 上產生當日日期與 cutoff；22:00 是延遲／修訂資料的確認重跑，institutional collector 仍由完整流程的日期閘門保護。這不代表 Issue #18 的備份、還原、權限、輪替、配額與來源條款 gates 已完成。
 
 ## Release decision record
 

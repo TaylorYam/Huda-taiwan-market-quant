@@ -1,0 +1,96 @@
+name: TWSE free factor daily ingestion
+
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Optional trading date for foreign cash, YYYY-MM-DD"
+        required: false
+        type: string
+      year:
+        description: "Optional turnover calendar year (with month)"
+        required: false
+        type: string
+      month:
+        description: "Optional turnover calendar month 1-12 (with year)"
+        required: false
+        type: string
+  schedule:
+    - cron: "0 8 * * 1-5"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: twse-free-factor-daily-ingestion
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    name: Collect TWSE foreign cash and market turnover
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      FOREIGN_CASH_DATE: ${{ inputs.date || '' }}
+      TURNOVER_YEAR: ${{ inputs.year || '' }}
+      TURNOVER_MONTH: ${{ inputs.month || '' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install HTTP client
+        run: python -m pip install --upgrade requests
+
+      - name: Verify Supabase secret names are available
+        shell: bash
+        run: |
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SECRET_KEY:-}" ]; then
+            echo "::error::SUPABASE_URL or SUPABASE_SECRET_KEY is empty or unavailable."
+            exit 1
+          fi
+
+      - name: Validate manual inputs
+        shell: bash
+        run: |
+          python - <<'PY'
+          from datetime import date
+          import os
+
+          target = os.environ.get("FOREIGN_CASH_DATE", "")
+          year = os.environ.get("TURNOVER_YEAR", "")
+          month = os.environ.get("TURNOVER_MONTH", "")
+          if target:
+              parsed = date.fromisoformat(target)
+              if parsed.isoformat() != target:
+                  raise SystemExit("date must use canonical YYYY-MM-DD")
+          if bool(year) != bool(month):
+              raise SystemExit("year and month must be provided together")
+          if month and not 1 <= int(month) <= 12:
+              raise SystemExit("month must be between 1 and 12")
+          print("TWSE free-factor inputs validated")
+          PY
+
+      - name: Collect TWSE foreign cash day
+        shell: bash
+        run: |
+          args=()
+          if [ -n "${FOREIGN_CASH_DATE:-}" ]; then args+=(--date "$FOREIGN_CASH_DATE"); fi
+          python -m scripts.collect_twse_foreign_cash "${args[@]}"
+
+      - name: Collect TWSE market turnover month
+        shell: bash
+        run: |
+          args=()
+          if [ -n "${TURNOVER_YEAR:-}" ]; then
+            args+=(--year "$TURNOVER_YEAR" --month "$TURNOVER_MONTH")
+          elif [ -n "${FOREIGN_CASH_DATE:-}" ]; then
+            args+=(--year "${FOREIGN_CASH_DATE:0:4}" --month "${FOREIGN_CASH_DATE:5:2}")
+          fi
+          python -m scripts.collect_twse_market_turnover "${args[@]}"

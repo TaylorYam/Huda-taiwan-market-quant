@@ -7,7 +7,7 @@ from scripts import collect_taifex_institutional as collector
 from src.data.taifex_institutional import parse_institutional_futures_payload
 
 
-def payload(trade_date: str = "20260916") -> bytes:
+def payload(trade_date: str = "20260916", *, encoding: str = "utf-8") -> bytes:
     return json.dumps(
         [
             {
@@ -24,7 +24,14 @@ def payload(trade_date: str = "20260916") -> bytes:
             }
         ],
         ensure_ascii=False,
-    ).encode()
+    ).encode(encoding)
+
+
+def test_cp950_json_payload_is_supported() -> None:
+    [observation] = parse_institutional_futures_payload(payload(encoding="cp950"))
+
+    assert observation.observation_date == "2026-09-16"
+    assert observation.values["open_interest_net"] == -76351
 
 
 def test_expected_date_match_passes() -> None:

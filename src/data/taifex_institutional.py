@@ -21,7 +21,7 @@ INSTITUTIONAL_FUTURES_ENDPOINT = (
     "https://openapi.taifex.com.tw/v1/"
     "MarketDataOfMajorInstitutionalTradersDetailsOfFuturesContractsBytheDate"
 )
-INSTITUTIONAL_FUTURES_PARSER_VERSION = "taifex-institutional-futures-oi-json@0.1"
+INSTITUTIONAL_FUTURES_PARSER_VERSION = "taifex-institutional-futures-oi-json@0.2"
 INSTITUTIONAL_FUTURES_SOURCE_NAME = "TAIFEX"
 INSTITUTIONAL_FUTURES_SOURCE_RECORD_KEY = "TX:foreign:institutional"
 
@@ -72,13 +72,7 @@ def parse_institutional_futures_payload(
         raise InstitutionalFuturesParseError(
             "institutional futures payload hash does not match response"
         )
-    try:
-        decoded = payload.decode("utf-8-sig")
-        raw_rows = json.loads(decoded)
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise InstitutionalFuturesParseError(
-            "institutional futures response is not valid UTF-8 JSON"
-        ) from exc
+    raw_rows = _decode_institutional_json(payload)
     if not isinstance(raw_rows, list):
         raise InstitutionalFuturesParseError(
             "institutional futures response is not a list"
@@ -391,6 +385,20 @@ def _normalize_slash_date(value: str) -> str:
         raise InstitutionalFuturesParseError(
             f"invalid official date {value!r}"
         ) from exc
+
+
+def _decode_institutional_json(payload: bytes) -> object:
+    """Decode the endpoint's JSON across the encodings used by TAIFEX."""
+
+    errors: list[UnicodeDecodeError | json.JSONDecodeError] = []
+    for encoding in ("utf-8-sig", "cp950"):
+        try:
+            return json.loads(payload.decode(encoding))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            errors.append(exc)
+    raise InstitutionalFuturesParseError(
+        "institutional futures response is not valid UTF-8 or CP950 JSON"
+    ) from errors[-1]
 
 
 def _range_number(raw: str, field: str) -> float:

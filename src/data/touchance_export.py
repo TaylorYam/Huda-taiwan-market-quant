@@ -30,7 +30,9 @@ def _delimiter(text: str) -> str:
     try:
         return csv.Sniffer().sniff(sample, delimiters=",\t;|").delimiter
     except csv.Error:
-        counts = {delimiter: sample.count(delimiter) for delimiter in ("\t", ",", ";", "|")}
+        counts = {
+            delimiter: sample.count(delimiter) for delimiter in ("\t", ",", ";", "|")
+        }
         return max(counts, key=counts.get) if max(counts.values()) else ","
 
 
@@ -51,7 +53,9 @@ def _rows(path: Path) -> list[dict[str, str]]:
     for row in reader:
         if not any((value or "").strip() for value in row.values()):
             continue
-        rows.append({key: (row.get(source) or "").strip() for key, source in normalized.items()})
+        rows.append(
+            {key: (row.get(source) or "").strip() for key, source in normalized.items()}
+        )
     return rows
 
 
@@ -102,7 +106,9 @@ def _summary(records: list[dict[str, Any]], *, kind: str) -> dict[str, Any]:
         "kind": kind,
         "row_count": len(records),
         "unique_date_count": len(counts),
-        "duplicate_dates": sorted(date_value for date_value, count in counts.items() if count > 1),
+        "duplicate_dates": sorted(
+            date_value for date_value, count in counts.items() if count > 1
+        ),
         "earliest_date": min(dates) if dates else None,
         "latest_date": max(dates) if dates else None,
         "records": records,
@@ -115,10 +121,24 @@ def parse_touchance_oi_export(path: str | Path) -> dict[str, Any]:
     rows = _rows(Path(path))
     records: list[dict[str, Any]] = []
     for row in rows:
-        long_oi = int(_number(_field(row, "foreign_long_oi", "外資多方未平倉", "外資多單口數"), integer=True))
-        short_oi = int(_number(_field(row, "foreign_short_oi", "外資空方未平倉", "外資空單口數"), integer=True))
-        net_text = _field(row, "foreign_net_oi", "外資淨未平倉", "淨未平倉", required=False)
-        net_oi = int(_number(net_text, integer=True)) if net_text else long_oi - short_oi
+        long_oi = int(
+            _number(
+                _field(row, "foreign_long_oi", "外資多方未平倉", "外資多單口數"),
+                integer=True,
+            )
+        )
+        short_oi = int(
+            _number(
+                _field(row, "foreign_short_oi", "外資空方未平倉", "外資空單口數"),
+                integer=True,
+            )
+        )
+        net_text = _field(
+            row, "foreign_net_oi", "外資淨未平倉", "淨未平倉", required=False
+        )
+        net_oi = (
+            int(_number(net_text, integer=True)) if net_text else long_oi - short_oi
+        )
         if net_oi != long_oi - short_oi:
             raise TouchanceExportError(
                 f"net OI mismatch on {_field(row, 'date', '日期')}: "

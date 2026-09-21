@@ -414,9 +414,11 @@ def _decode_institutional_json(payload: bytes) -> object:
                 return json.loads(candidate.decode(encoding))
             except (UnicodeDecodeError, json.JSONDecodeError) as exc:
                 errors.append(exc)
+    preview = payload[:512].decode("utf-8-sig", errors="replace").splitlines()[0][:256]
     raise InstitutionalFuturesParseError(
         "institutional futures response is not valid JSON in supported encodings; "
-        f"payload_length={len(payload)} prefix_hex={payload[:16].hex()}"
+        f"payload_length={len(payload)} prefix_hex={payload[:16].hex()} "
+        f"header_preview={preview!r}"
     ) from errors[-1]
 
 

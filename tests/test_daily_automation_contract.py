@@ -33,7 +33,9 @@ class RecordingWriter:
         return MarketScoreWriteResult(score_id=1, action="inserted")
 
 
-def test_daily_runner_contract_preserves_explicit_window_and_unavailable_result() -> None:
+def test_daily_runner_contract_preserves_explicit_window_and_unavailable_result() -> (
+    None
+):
     """The automation boundary is deterministic even when every source is absent."""
 
     reader = EmptyReader()

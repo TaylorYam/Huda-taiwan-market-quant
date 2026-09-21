@@ -74,6 +74,7 @@ from .taifex_tx_daily import (
     TXDailyFetchError,
     TXDailyParseError,
     build_daily_form,
+    collect_tx_day,
     fetch_tx_day,
     parse_tx_daily_payload,
 )
@@ -229,6 +230,7 @@ __all__ = [
     "collect_taiex_month",
     "collect_taiex_range",
     "collect_tx_daily",
+    "collect_tx_day",
     "collect_tx_year",
     "collect_vix_month",
     "collect_vix_range",

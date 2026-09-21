@@ -1,8 +1,10 @@
 from datetime import date
 
+from src.data.storage import SQLiteObservationStore
 from src.data.taifex_tx_daily import (
     TX_DAILY_ENDPOINT,
     build_daily_form,
+    collect_tx_day,
     fetch_tx_day,
     parse_tx_daily_payload,
 )
@@ -82,3 +84,38 @@ def test_empty_daily_table_is_a_non_trading_day() -> None:
         )
         == []
     )
+
+
+def test_collector_is_idempotent_for_same_daily_payload() -> None:
+    payload = daily_payload()
+    with SQLiteObservationStore(":memory:") as store:
+        first = collect_tx_day(
+            store, date(2026, 9, 17), http_post=lambda _url, _data: payload
+        )
+        duplicate = collect_tx_day(
+            store, date(2026, 9, 17), http_post=lambda _url, _data: payload
+        )
+
+    assert [result.action for result in first] == ["inserted"]
+    assert [result.action for result in duplicate] == ["duplicate"]
+
+
+def test_collector_links_changed_daily_payload_as_revision() -> None:
+    with SQLiteObservationStore(":memory:") as store:
+        first = collect_tx_day(
+            store,
+            date(2026, 9, 17),
+            http_post=lambda _url, _data: daily_payload(),
+        )
+        revised_payload = daily_payload().replace(b"46,445", b"46,446")
+        revised = collect_tx_day(
+            store,
+            date(2026, 9, 17),
+            http_post=lambda _url, _data: revised_payload,
+        )
+        current = store.get_observation(revised[0].observation_id)
+
+    assert revised[0].action == "inserted"
+    assert current is not None
+    assert current.supersedes_id == first[0].observation_id
+    assert current.values["close"] == 46446

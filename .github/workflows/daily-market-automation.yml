@@ -1,0 +1,228 @@
+name: Daily market automation (supervised)
+
+# This workflow is intentionally manual-only until the operational gates in
+# docs/issue-18-operations-runbook-v0.1.md are complete.
+on:
+  workflow_dispatch:
+    inputs:
+      target_date:
+        description: Taiwan market date (YYYY-MM-DD)
+        required: true
+        type: string
+      as_of:
+        description: Information cutoff with timezone (for example, 2026-09-17T20:00:00+08:00)
+        required: true
+        type: string
+      confirm_write:
+        description: Confirm that this run may write observations and Market Score
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-market-automation
+  cancel-in-progress: false
+
+jobs:
+  collect-and-score:
+    name: Collect sources, then calculate Market Score
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      REQUESTED_TARGET_DATE: ${{ inputs.target_date }}
+      REQUESTED_AS_OF: ${{ inputs.as_of }}
+      CONFIRM_WRITE: ${{ inputs.confirm_write }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install runtime dependencies
+        run: python -m pip install --requirement requirements-dev.txt
+
+      - name: Validate supervised inputs and secrets
+        shell: bash
+        run: |
+          echo "Validate supervised inputs and secrets" > "$RUNNER_TEMP/daily-market-automation-stage.txt"
+          if [[ "${CONFIRM_WRITE:-false}" != "true" ]]; then
+            echo "::error::Set confirm_write=true to authorize this supervised write run."
+            exit 1
+          fi
+          if [[ -z "${SUPABASE_URL:-}" || -z "${SUPABASE_SECRET_KEY:-}" ]]; then
+            echo "::error::SUPABASE_URL or SUPABASE_SECRET_KEY is empty or unavailable."
+            exit 1
+          fi
+
+          python - <<'PY'
+          import os
+          from datetime import date, datetime
+          from zoneinfo import ZoneInfo
+
+          target_text = os.environ["REQUESTED_TARGET_DATE"]
+          as_of_text = os.environ["REQUESTED_AS_OF"]
+          try:
+              target = date.fromisoformat(target_text)
+          except ValueError as exc:
+              raise SystemExit("target_date must use YYYY-MM-DD") from exc
+          if target.isoformat() != target_text:
+              raise SystemExit("target_date must use canonical YYYY-MM-DD")
+
+          try:
+              boundary = datetime.fromisoformat(as_of_text.replace("Z", "+00:00"))
+          except ValueError as exc:
+              raise SystemExit("as_of must be an ISO timestamp with timezone") from exc
+          if boundary.tzinfo is None or boundary.utcoffset() is None:
+              raise SystemExit("as_of must include a timezone")
+
+          taipei = ZoneInfo("Asia/Taipei")
+          canonical_as_of = boundary.astimezone(taipei).isoformat()
+          if target > boundary.astimezone(taipei).date():
+              raise SystemExit("target_date is after as_of in Asia/Taipei")
+
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
+              env_file.write(f"TARGET_DATE={target.isoformat()}\n")
+              env_file.write(f"AS_OF_TAIPEI={canonical_as_of}\n")
+              env_file.write(f"TARGET_YEAR={target.year}\n")
+              env_file.write(f"TARGET_MONTH={target.month:02d}\n")
+          print(f"Validated target_date={target.isoformat()} as_of={canonical_as_of}")
+          PY
+
+      # Source steps are deliberately separate and sequential. A failed
+      # collector stops the job, so the score step cannot run on partial input.
+      - name: Collect TAIEX month
+        shell: bash
+        run: |
+          echo "TAIEX month (target_date=$TARGET_DATE)" > "$RUNNER_TEMP/daily-market-automation-stage.txt"
+          python -m scripts.collect_taiex_month --year "$TARGET_YEAR" --month "$TARGET_MONTH"
+          {
+            echo "### Source: TAIEX month"
+            echo "- target_date: \`$TARGET_DATE\`"
+            echo "- collection window: \`${TARGET_YEAR}-${TARGET_MONTH}\`"
+            echo "- result: completed"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Collect TWSE foreign cash day
+        shell: bash
+        run: |
+          echo "TWSE foreign cash day (target_date=$TARGET_DATE)" > "$RUNNER_TEMP/daily-market-automation-stage.txt"
+          python -m scripts.collect_twse_foreign_cash --date "$TARGET_DATE"
+          {
+            echo "### Source: TWSE foreign cash day"
+            echo "- target_date: \`$TARGET_DATE\`"
+            echo "- dataset: BFI82U foreign cash"
+            echo "- result: completed"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Collect TWSE market turnover month
+        shell: bash
+        run: |
+          echo "TWSE market turnover month (target_date=$TARGET_DATE)" > "$RUNNER_TEMP/daily-market-automation-stage.txt"
+          python -m scripts.collect_twse_market_turnover --year "$TARGET_YEAR" --month "$TARGET_MONTH"
+          {
+            echo "### Source: TWSE market turnover month"
+            echo "- target_date: \`$TARGET_DATE\`"
+            echo "- collection window: \`${TARGET_YEAR}-${TARGET_MONTH}\`"
+            echo "- dataset: FMTQIK market turnover"
+            echo "- result: completed"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Collect TAIFEX TX day
+        shell: bash
+        run: |
+          echo "TAIFEX TX day (target_date=$TARGET_DATE)" > "$RUNNER_TEMP/daily-market-automation-stage.txt"
+          python -m scripts.collect_taifex_tx_day --date "$TARGET_DATE"
+          {
+            echo "### Source: TAIFEX TX day"
+            echo "- target_date: \`$TARGET_DATE\`"
+            echo "- collection window: exact requested trading date"
+            echo "- result: completed"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Collect TAIFEX PCR day
+        shell: bash
+        run: |
+          echo "TAIFEX PCR day (target_date=$TARGET_DATE)" > "$RUNNER_TEMP/daily-market-automation-stage.txt"
+          python -m scripts.collect_taifex_pcr --date "$TARGET_DATE"
+          {
+            echo "### Source: TAIFEX PCR day"
+            echo "- target_date: \`$TARGET_DATE\`"
+            echo "- result: completed"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Collect TAIFEX VIX month
+        shell: bash
+        run: |
+          echo "TAIFEX VIX month (target_date=$TARGET_DATE)" > "$RUNNER_TEMP/daily-market-automation-stage.txt"
+          python -m scripts.collect_taifex_vix_month --year "$TARGET_YEAR" --month "$TARGET_MONTH"
+          {
+            echo "### Source: TAIFEX VIX month"
+            echo "- target_date: \`$TARGET_DATE\`"
+            echo "- collection window: \`${TARGET_YEAR}-${TARGET_MONTH}\`"
+            echo "- result: completed"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Collect TAIFEX institutional futures snapshot
+        shell: bash
+        run: |
+          echo "TAIFEX institutional futures latest snapshot (target_date=$TARGET_DATE)" > "$RUNNER_TEMP/daily-market-automation-stage.txt"
+          python -m scripts.collect_taifex_institutional --write --expected-date "$TARGET_DATE"
+          {
+            echo "### Source: TAIFEX institutional futures latest snapshot"
+            echo "- target_date requested: \`$TARGET_DATE\`"
+            echo "- source window: latest official snapshot"
+            echo "- expected-date guard: \`$TARGET_DATE\`"
+            echo "- result: completed"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Calculate and persist Market Score
+        shell: bash
+        run: |
+          echo "Market Score (target_date=$TARGET_DATE, as_of=$AS_OF_TAIPEI)" > "$RUNNER_TEMP/daily-market-automation-stage.txt"
+          python -m src.scoring.daily_runner --target-date "$TARGET_DATE" --as-of "$AS_OF_TAIPEI"
+          {
+            echo "### Market Score"
+            echo "- target_date: \`$TARGET_DATE\`"
+            echo "- as_of (Asia/Taipei): \`$AS_OF_TAIPEI\`"
+            echo "- result: calculated and persisted"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish successful run summary
+        if: ${{ success() }}
+        shell: bash
+        run: |
+          {
+            echo "## Daily market automation completed"
+            echo ""
+            echo "- target_date (Asia/Taipei): \`${TARGET_DATE}\`"
+            echo "- as_of (Asia/Taipei): \`${AS_OF_TAIPEI}\`"
+            echo "- source collection: completed"
+            echo "- Market Score: calculated and persisted"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish failure summary
+        if: ${{ failure() }}
+        shell: bash
+        run: |
+          failed_stage="workflow setup or input validation"
+          if [[ -s "$RUNNER_TEMP/daily-market-automation-stage.txt" ]]; then
+            failed_stage="$(cat "$RUNNER_TEMP/daily-market-automation-stage.txt")"
+          fi
+          {
+            echo "## Daily market automation failed"
+            echo ""
+            echo "- target_date (requested): \`${REQUESTED_TARGET_DATE:-unavailable}\`"
+            echo "- as_of (requested): \`${REQUESTED_AS_OF:-unavailable}\`"
+            echo "- failed or interrupted stage: \`$failed_stage\`"
+            echo "- source collection and scoring run sequentially; later steps were skipped after the first failure"
+            echo "- inspect the failed step above; rerun manually with the same inputs only after the source or configuration issue is addressed"
+          } >> "$GITHUB_STEP_SUMMARY"

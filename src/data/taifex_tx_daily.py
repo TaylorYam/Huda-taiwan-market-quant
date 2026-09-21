@@ -11,12 +11,13 @@ from __future__ import annotations
 import hashlib
 import time
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import replace
 from datetime import date, datetime, timezone
 from html.parser import HTMLParser
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from .storage import Observation
+from .storage import Observation, ObservationStore, WriteResult
 
 TX_DAILY_ENDPOINT = "https://www.taifex.com.tw/cht/3/futDailyMarketReport"
 TX_DAILY_PARSER_VERSION = "taifex-tx-daily-html@0.1"
@@ -166,6 +167,41 @@ def fetch_tx_day(
         ) from exc
 
 
+def collect_tx_day(
+    store: ObservationStore,
+    observation_date: date,
+    *,
+    market_code: int = 0,
+    http_post: Callable[[str, Mapping[str, str]], bytes] | None = None,
+    parser_version: str = TX_DAILY_PARSER_VERSION,
+    retries: int = 5,
+    retry_delay: float = 2.0,
+) -> list[WriteResult]:
+    """Fetch one date-based TX report and persist its observations.
+
+    Replaying an unchanged official response is idempotent through the store's
+    payload identity.  If TAIFEX revises the same date/session/contract row,
+    the new observation is linked to the latest prior row with
+    ``supersedes_id`` before it is written.
+    """
+
+    observations = fetch_tx_day(
+        observation_date,
+        market_code=market_code,
+        http_post=http_post,
+        parser_version=parser_version,
+        retries=retries,
+        retry_delay=retry_delay,
+    )
+    results: list[WriteResult] = []
+    for observation in observations:
+        previous_id = _latest_observation_id(store, observation)
+        if previous_id is not None:
+            observation = replace(observation, supersedes_id=previous_id)
+        results.append(store.write_observation(observation))
+    return results
+
+
 def build_daily_form(observation_date: date, *, market_code: int = 0) -> dict[str, str]:
     """Build the POST body used by the official daily report page."""
 
@@ -278,6 +314,46 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _latest_observation_id(
+    store: ObservationStore, observation: Observation
+) -> int | None:
+    """Find the latest row for one daily TX logical identity."""
+
+    connection = getattr(store, "_connection", None)
+    if connection is not None:
+        row = connection.execute(
+            """
+            SELECT id FROM observations
+            WHERE dataset_id = ? AND observation_date = ?
+              AND source_record_key = ?
+              AND IFNULL(publication_label, '') = IFNULL(?, '')
+            ORDER BY id DESC LIMIT 1
+            """,
+            (
+                observation.dataset_id,
+                observation.observation_date,
+                observation.source_record_key,
+                observation.publication_label,
+            ),
+        ).fetchone()
+        return None if row is None else int(row[0])
+
+    select = getattr(store, "_select", None)
+    if callable(select):
+        rows = select(
+            {
+                "dataset_id": observation.dataset_id,
+                "observation_date": observation.observation_date,
+                "source_record_key": observation.source_record_key,
+                "publication_label": observation.publication_label,
+            },
+            "id",
+        )
+        if rows:
+            return max(int(row["id"]) for row in rows)
+    return None
+
+
 __all__ = [
     "TX_DAILY_ENDPOINT",
     "TX_DAILY_PARSER_VERSION",
@@ -285,6 +361,7 @@ __all__ = [
     "TXDailyFetchError",
     "TXDailyParseError",
     "build_daily_form",
+    "collect_tx_day",
     "fetch_tx_day",
     "parse_tx_daily_payload",
 ]

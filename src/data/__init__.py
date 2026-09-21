@@ -104,6 +104,11 @@ from .taifex_vix import (
     parse_vix_payload,
     parse_vix_range_payload,
 )
+from .touchance_export import (
+    TouchanceExportError,
+    parse_touchance_oi_export,
+    parse_touchance_vix_export,
+)
 from .twse_foreign_cash import (
     FOREIGN_CASH_DATASET_ID,
     FOREIGN_CASH_ENDPOINT,
@@ -210,6 +215,7 @@ __all__ = [
     "TXDailyParseError",
     "TXFetchError",
     "TXParseError",
+    "TouchanceExportError",
     "VIXFetchError",
     "VIXParseError",
     "WriteResult",
@@ -256,6 +262,8 @@ __all__ = [
     "parse_pcr_day",
     "parse_pcr_payload",
     "parse_taiex_payload",
+    "parse_touchance_oi_export",
+    "parse_touchance_vix_export",
     "parse_tx_archive",
     "parse_tx_archive_payload",
     "parse_tx_daily_payload",

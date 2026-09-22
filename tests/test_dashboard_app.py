@@ -450,6 +450,8 @@ def test_tradingview_kline_html_links_selected_factor_pane():
     assert "renderFactorExplanation" in html
     assert "前值遞補" in html
     assert "rangeOptions" in html
+    assert "let selectedRange = '6M';" in html
+    assert "candleData.length - 130" in html
     assert "score-notice" in html
     assert "factorCurrent" in html
     assert "分數（0–100）" in html

@@ -512,6 +512,7 @@ def test_dashboard_renders_history_charts_without_recomputing(monkeypatch):
     store.get_observation_history.assert_called_once_with(
         "twse_taiex_daily_v1", limit=1000
     )
+    assert any("data-huda-chart-iframe-style" in item.body for item in app.markdown)
 
 
 def test_source_api_error_keeps_other_source_rows_visible(monkeypatch):

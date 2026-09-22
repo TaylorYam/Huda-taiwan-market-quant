@@ -435,7 +435,7 @@ def build_tradingview_kline_html(
     :root { color-scheme: light; }
     html, body { margin: 0; padding: 0; background: #ffffff; }
     body { overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; user-select: none; -webkit-user-select: none; caret-color: transparent; }
-    .shell { width: 100%; height: 1320px; display: flex; flex-direction: column; background: #ffffff; }
+    .shell { width: 100%; min-height: 1320px; height: auto; display: flex; flex-direction: column; background: #ffffff; }
     .legend { min-height: 50px; padding: 9px 14px 4px; box-sizing: border-box; color: #1f2937; font-size: 13px; line-height: 20px; }
     .title { font-weight: 700; letter-spacing: .01em; }
     .values { color: #4b5563; margin-left: 12px; }
@@ -450,19 +450,19 @@ def build_tradingview_kline_html(
     #price-chart { flex: 0 0 410px; min-height: 300px; }
     .score-title { height: 26px; padding: 5px 14px 0; box-sizing: border-box; color: #4b5563; font-size: 12px; border-top: 1px solid #e5e7eb; }
     #score-chart { flex: 0 0 150px; }
-    .factor-table { flex: 0 0 245px; min-height: 0; padding: 10px 14px 8px; border-top: 1px solid #e5e7eb; box-sizing: border-box; }
+    .factor-table { flex: 0 0 auto; min-height: 0; padding: 10px 14px 8px; border-top: 1px solid #e5e7eb; box-sizing: border-box; }
     .factor-table h2 { margin: 0 0 6px; color: #1f2937; font-size: 16px; line-height: 22px; }
-    .table-scroll { max-height: 188px; overflow: auto; border: 1px solid #e5e7eb; border-radius: 8px; }
+    .table-scroll { border: 1px solid #e5e7eb; border-radius: 8px; overflow: visible; }
     .factor-table table { width: 100%; border-collapse: collapse; color: #374151; font-size: 12px; }
     .factor-table th, .factor-table td { padding: 5px 8px; text-align: left; border-bottom: 1px solid #eef1f4; white-space: nowrap; }
-    .factor-table th { position: sticky; top: 0; background: #f8fafc; color: #6b7280; font-weight: 600; }
+    .factor-table th { background: #f8fafc; color: #6b7280; font-weight: 600; }
     .factor-table tr:last-child td { border-bottom: 0; }
     .table-note { margin: 5px 0 0; color: #9ca3af; font-size: 11px; }
-    .factor-panel { flex: 0 0 430px; min-height: 430px; display: flex; flex-direction: column; border-top: 1px solid #e5e7eb; }
+    .factor-panel { flex: 0 0 auto; min-height: 430px; display: flex; flex-direction: column; border-top: 1px solid #e5e7eb; }
     .score-notice { margin: 8px 14px 0; padding: 7px 9px; border-left: 3px solid #2563eb; background: #eff6ff; color: #1e3a8a; font-size: 11px; line-height: 1.45; }
     .factor-title { height: 26px; padding: 5px 14px 0; box-sizing: border-box; color: #4b5563; font-size: 12px; }
-    .factor-tabs { display: flex; gap: 4px; height: 36px; padding: 2px 14px 5px; box-sizing: border-box; overflow-x: auto; }
-    .factor-tab { flex: 0 0 auto; border: 1px solid #d1d5db; border-radius: 5px; background: #ffffff; color: #4b5563; padding: 3px 9px; font: inherit; font-size: 12px; cursor: pointer; }
+    .factor-tabs { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 4px; min-height: 36px; height: auto; padding: 2px 14px 5px; box-sizing: border-box; overflow: visible; }
+    .factor-tab { flex: 0 0 auto; min-height: 30px; border: 1px solid #d1d5db; border-radius: 5px; background: #ffffff; color: #4b5563; padding: 3px 9px; font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
     .factor-tab[aria-selected="true"] { border-color: var(--factor-color, #2563eb); background: #eff6ff; color: var(--factor-color, #1d4ed8); font-weight: 600; }
     #factor-chart { flex: 0 0 190px; min-height: 150px; }
     .factor-current { margin: 6px 14px 0; color: #1f2937; font-size: 12px; font-weight: 600; }
@@ -472,13 +472,15 @@ def build_tradingview_kline_html(
     .factor-explanation-grid dt { color: #6b7280; font-weight: 600; }
     .factor-explanation-grid dd { margin: 0; }
     @media (max-width: 720px) {
-      .shell { height: 1320px; }
+      .shell { min-height: 1550px; }
       #price-chart { flex-basis: 330px; }
       #score-chart { flex-basis: 130px; }
-      .factor-panel { flex-basis: 455px; min-height: 455px; }
+      .factor-panel { flex-basis: auto; min-height: 455px; }
       #factor-chart { flex-basis: 170px; }
       .factor-explanation-grid { grid-template-columns: 68px 1fr; }
       .values { display: block; margin-left: 0; }
+      .factor-table th, .factor-table td { white-space: normal; word-break: break-word; }
+      .factor-table table { table-layout: fixed; }
     }
   </style>
 </head>
@@ -928,7 +930,7 @@ def render_history_charts(
     if kline_html is None:
         st.info("目前沒有可繪製的 TAIEX OHLC 資料。")
     else:
-        components.html(kline_html, height=1320, scrolling=False)
+        components.html(kline_html, height=1600, scrolling=False)
         st.caption(
             "操作：可用 1M／3M／6M／1Y／全部切換期間；滑鼠滾輪縮放，按住滑鼠左鍵左右拖曳；K 線、Market Score 與選定因子共用日期游標，各副圖 Y 軸依目前可見資料自動調整。"
         )

@@ -11,8 +11,12 @@ and persisted by the daily scoring pipeline.
 2. Linked chart: Taiwan Weighted Index daily candlesticks as the main pane and
    Market Score as the score pane.
 3. Factor tabs and selected-factor trend pane.
-4. Persisted factor table.
+4. Persisted factor table. It renders all persisted factor rows without an
+   inner vertical scroll area.
 5. Collapsed source data quality section.
+
+Factor tabs wrap onto additional rows when the viewport is narrow, so every
+label remains directly visible and selectable without horizontal scrolling.
 
 ## Linked chart behavior
 

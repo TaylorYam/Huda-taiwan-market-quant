@@ -453,6 +453,17 @@ def test_tradingview_kline_html_links_selected_factor_pane():
     assert "score-notice" in html
     assert "factorCurrent" in html
     assert "分數（0–100）" in html
+    assert (
+        ".table-scroll { border: 1px solid #e5e7eb; border-radius: 8px; overflow: visible; }"
+        in html
+    )
+    assert "max-height: 188px" not in html
+    assert ".factor-tabs { display: flex; flex-wrap: wrap;" in html
+    assert (
+        "overflow-x: auto"
+        not in html.split(".factor-tabs", 1)[1].split(".factor-tab", 1)[0]
+    )
+    assert "white-space: nowrap" in html.split(".factor-tab {", 1)[1].split("}", 1)[0]
 
 
 def test_dashboard_renders_history_charts_without_recomputing(monkeypatch):

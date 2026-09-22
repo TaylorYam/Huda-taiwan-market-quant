@@ -42,6 +42,7 @@ jobs:
       REQUESTED_TARGET_DATE: ${{ inputs.target_date }}
       REQUESTED_AS_OF: ${{ inputs.as_of }}
       CONFIRM_WRITE: ${{ inputs.confirm_write }}
+      SCHEDULE_CRON: ${{ github.event.schedule }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -60,10 +61,12 @@ jobs:
         run: |
           echo "Validate supervised inputs and secrets" > "$RUNNER_TEMP/daily-market-automation-stage.txt"
           if [[ "${GITHUB_EVENT_NAME:-}" == "schedule" ]]; then
-            export REQUESTED_TARGET_DATE="$(TZ=Asia/Taipei date +%F)"
+            export REQUESTED_TARGET_DATE="$(python -m src.automation.scheduled_target \
+              --schedule "$SCHEDULE_CRON" \
+              --now "$(TZ=Asia/Taipei date --iso-8601=seconds)")"
             export REQUESTED_AS_OF="$(TZ=Asia/Taipei date --iso-8601=seconds)"
             export CONFIRM_WRITE=true
-            echo "Scheduled run: target_date=$REQUESTED_TARGET_DATE as_of=$REQUESTED_AS_OF"
+            echo "Scheduled run: schedule=$SCHEDULE_CRON target_date=$REQUESTED_TARGET_DATE as_of=$REQUESTED_AS_OF"
           fi
           if [[ "${CONFIRM_WRITE:-false}" != "true" ]]; then
             echo "::error::Set confirm_write=true to authorize this supervised write run."

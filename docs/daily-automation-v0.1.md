@@ -5,9 +5,11 @@
 The workflow [`daily-market-automation.yml`](../.github/workflows/daily-market-automation.yml)
 supports both explicit manual runs and two weekday scheduled passes at 16:30 and
 22:00 Asia/Taipei (`30 8` and `0 14` in GitHub Actions UTC). The schedule derives
-the current Taiwan date and cutoff on the runner and acknowledges the write
-internally. The later pass is a confirmation run for delayed or revised official
-data. Issue #18
+the target date from the planned local schedule time, so a delayed run that
+crosses midnight remains on the intended market date. It acknowledges the write
+internally and refreshes the score cutoff after all source collectors finish, so
+rows ingested by the same run are eligible for scoring. The later pass is a
+confirmation run for delayed or revised official data. Issue #18
 still has outstanding backup/restore, access-separation, secret-rotation, quota,
 and source-attribution work, so enabling this trigger is not approval for a final
 production release.
@@ -23,11 +25,12 @@ For a manual run, an operator starts **Actions → Daily market automation
 - `confirm_write=true`, an explicit acknowledgement that the run may write source
   observations and the derived Market Score.
 
-The scheduled path sets `target_date` to the current `Asia/Taipei` date and `as_of`
-to the current timezone-aware cutoff before applying the same validation. Both paths
-normalize `as_of` to `Asia/Taipei`, reject a target date after the Taiwan as-of date,
-and pass the same target date to the date-specific collectors. Repeating a run with
-the same inputs is supported:
+The scheduled path resolves `target_date` from the cron schedule and runner time,
+then sets an initial timezone-aware `as_of` for input validation. After source
+collection it refreshes the scheduled score cutoff to the current Taipei time;
+manual runs retain their explicit `as_of`. Both paths normalize `as_of` to
+`Asia/Taipei`, reject a target date after the Taiwan as-of date, and pass the same
+target date to the date-specific collectors. Repeating a run with the same inputs is supported:
 the existing observation and Market Score writers preserve duplicate detection and
 revision lineage.
 
@@ -52,8 +55,8 @@ collection:
 8. `src.scoring.daily_runner` with the normalized target/as-of window
 
 The score runner reads all seven supported datasets, applies its point-in-time
-filters, and persists an available or explicitly unavailable result. It does not
-create or alter the Supabase schema.
+filters using the refreshed scheduled cutoff, and persists an available or
+explicitly unavailable result. It does not create or alter the Supabase schema.
 
 ## Known v0.1 limits
 

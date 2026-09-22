@@ -322,7 +322,12 @@ def test_tradingview_kline_html_uses_visible_range_auto_scale_and_zoom():
     assert "addCandlestickSeries" in html
     assert "autoScale: true" in html
     assert "minimumWidth: 120" in html
-    assert "mouseWheel: true" in html
+    assert "mouseWheel: false" in html
+    assert "setMainChartWheelActive" in html
+    assert "priceElement.addEventListener('pointerdown'" in html
+    assert "document.addEventListener('selectstart'" in html
+    assert "user-select: none" in html
+    assert "caret-color: transparent" in html
     assert "pressedMouseMove: true" in html
     assert "setVisibleLogicalRange" in html
     assert "getVisibleRange" in html

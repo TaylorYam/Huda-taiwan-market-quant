@@ -190,7 +190,7 @@ def test_factor_score_display_separates_normalized_score_from_raw_value():
     )
     row = next(row for row in rows if row["因子"] == "外資台指期淨部位")
     assert row["分數"] == "8.7 / 100"
-    assert row["原始值"] == "+8,700.0 口"
+    assert row["原始值"] == "+8,700 口"
     markup = factor_table_markup(
         {
             "factor_scores_json": {
@@ -205,6 +205,49 @@ def test_factor_score_display_separates_normalized_score_from_raw_value():
     )
     assert "分數（0–100）" in markup
     assert "歷史分布" in markup
+
+
+def test_factor_raw_display_uses_requested_source_units():
+    assert (
+        factor_raw_display(
+            "foreign_cash_5d",
+            {
+                "status": "available",
+                "raw_value": 0.009,
+                "raw_values": {"foreign_5d_net": 123456789, "ratio": 0.009},
+            },
+        )
+        == "+123,456,789 元"
+    )
+    assert (
+        factor_raw_display(
+            "foreign_tx_net_position",
+            {"status": "available", "raw_value": -74081},
+        )
+        == "-74,081 口"
+    )
+    assert (
+        factor_raw_display(
+            "foreign_tx_net_position_5d_change",
+            {"status": "available", "raw_value": 8577},
+        )
+        == "+8,577 口"
+    )
+    assert (
+        factor_raw_display(
+            "txo_oi_pcr",
+            {
+                "status": "available",
+                "raw_value": 1.0,
+                "raw_values": {"oi_pcr": 1.0},
+            },
+        )
+        == "100.0%"
+    )
+    assert (
+        factor_raw_display("taiwan_vix", {"status": "available", "raw_value": 21.8})
+        == "21.8"
+    )
 
 
 def test_legacy_factor_record_does_not_invent_raw_value():

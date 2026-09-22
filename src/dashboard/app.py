@@ -789,7 +789,7 @@ def build_tradingview_kline_html(
     const rangeOptions = [
       ['1M', 22], ['3M', 65], ['6M', 130], ['1Y', 252], ['全部', null]
     ];
-    let selectedRange = '3M';
+    let selectedRange = '6M';
     const updateRangeButtons = () => {
       if (!rangeControlsElement) return;
       rangeControlsElement.querySelectorAll('button').forEach((button) => {
@@ -883,7 +883,7 @@ def build_tradingview_kline_html(
     priceChart.subscribeCrosshairMove(syncCrosshair);
     if (scoreChart) scoreChart.subscribeCrosshairMove(syncCrosshair);
     if (factorChart) factorChart.subscribeCrosshairMove(syncCrosshair);
-    const initialRange = { from: Math.max(0, candleData.length - 65), to: candleData.length + 8 };
+    const initialRange = { from: Math.max(0, candleData.length - 130), to: candleData.length + 8 };
     priceChart.timeScale().setVisibleLogicalRange(initialRange);
     const initialVisibleRange = priceChart.timeScale().getVisibleRange();
     if (scoreChart && initialVisibleRange) {

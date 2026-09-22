@@ -24,8 +24,8 @@ label remains directly visible and selectable without horizontal scrolling.
 - The main pane renders daily OHLC candlesticks only.
 - The Market Score pane and selected factor pane share the candle dates, visible
   range, crosshair, and zoom/pan interaction.
-- The default visible range is the latest three months. Buttons switch to 1M,
-  3M, 6M, 1Y, or 全部.
+- The default visible range is the latest six months. Buttons switch to 1M, 3M,
+  6M, 1Y, or 全部.
 - Mouse-wheel zoom changes the horizontal and vertical view together; dragging
   moves the visible date range. Each pane auto-scales its Y axis to visible data.
 - Market Score uses a stable blue. The eight factors use eight additional stable

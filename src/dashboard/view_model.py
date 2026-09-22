@@ -34,56 +34,75 @@ FACTOR_CATEGORIES = {
     "taiwan_vix": "市場風險",
 }
 
+FACTOR_RAW_METADATA = {
+    "taiex_ma20_ma60_trend": {"label": "收盤、MA20、MA60", "unit": "點"},
+    "taiex_20d_momentum": {"label": "20 日報酬率", "unit": "%"},
+    "foreign_cash_5d": {"label": "外資 5 日買賣超比例", "unit": "%"},
+    "foreign_tx_net_position": {"label": "外資台指期淨部位", "unit": "口"},
+    "foreign_tx_net_position_5d_change": {
+        "label": "外資台指期淨部位 5 日變化",
+        "unit": "口",
+    },
+    "tx_basis": {"label": "期現貨價差", "unit": "點"},
+    "txo_oi_pcr": {"label": "Put / Call OI 比例", "unit": "倍"},
+    "taiwan_vix": {"label": "Taiwan VIX 收盤", "unit": "點"},
+}
+
+SCORE_INTERPRETATION = (
+    "因子分數是把原始指標與自身歷史分布比較（或依模型規則）後轉成 0–100；"
+    "50 附近代表接近中性／歷史中位位置，不代表原始值為 50。"
+)
+
 # Keep the public explanation concise and aligned with the versioned model.
 # Source attribution and score-boundary details remain in the source-status
 # section and model documentation rather than being repeated under every chart.
 FACTOR_EXPLANATIONS = {
     "taiex_ma20_ma60_trend": {
         "purpose": "判斷大盤目前的主要趨勢方向。",
-        "window": "當日收盤、MA20 與 MA60。",
-        "logic": "依價格與兩條均線的排列給分：指數 > MA20 > MA60 為 100；指數 < MA20 < MA60 為 0；其餘排列依序給 25、50 或 75。",
+        "window": "原始值：收盤、MA20、MA60（點）；計算窗口：60 個交易日。",
+        "logic": "原始價格與均線不直接當成分數；依排列規則轉成 0、25、50、75 或 100 分。指數 > MA20 > MA60 為 100；指數 < MA20 < MA60 為 0。",
         "direction": "均線排列越偏多，分數越高。",
     },
     "taiex_20d_momentum": {
         "purpose": "觀察最近約一個月的大盤價格強弱。",
-        "window": "20 個交易日。",
-        "logic": "20 日報酬率 = 今日 TAIEX / 20 個交易日前 TAIEX − 1，再與歷史分布比較轉成分數。",
+        "window": "原始值：20 日報酬率（%）；歷史分布：近 3 年（v0.1 初始假設）。",
+        "logic": "20 日報酬率 = 今日 TAIEX / 20 個交易日前 TAIEX − 1，再與歷史分布比較轉成 0–100 分。",
         "direction": "動能越強，分數越高。",
     },
     "foreign_cash_5d": {
         "purpose": "觀察外資近期資金流入或流出。",
-        "window": "最近 5 個交易日。",
-        "logic": "外資 5 日累計買賣超 ÷ 市場 5 日成交金額，再與歷史分布比較。",
+        "window": "原始值：5 日買賣超比例（%）；歷史分布：近 3 年（v0.1 初始假設）。",
+        "logic": "外資 5 日累計買賣超 ÷ 市場 5 日成交金額，再與歷史分布比較轉成 0–100 分。",
         "direction": "買超比例越高，分數越高。",
     },
     "foreign_tx_net_position": {
         "purpose": "判斷外資台指期目前相對偏多或偏空。",
-        "window": "當日外資台指期未平倉部位與歷史分布。",
-        "logic": "淨部位 = 多方未平倉 − 空方未平倉，再依外資自身歷史分布轉成分數。",
+        "window": "原始值：淨部位（口）；歷史分布：近 3 年（v0.1 初始假設）。",
+        "logic": "淨部位 = 多方未平倉 − 空方未平倉，再依外資自身歷史分布轉成 0–100 分。",
         "direction": "相對淨多越高，分數越高。",
     },
     "foreign_tx_net_position_5d_change": {
         "purpose": "觀察外資期貨部位正在往哪個方向變化。",
-        "window": "今日與 5 個交易日前。",
-        "logic": "5 日變化 = 今日淨部位 − 5 個交易日前淨部位。",
+        "window": "原始值：淨部位變化（口）；比較今日與 5 個交易日前，歷史分布近 3 年。",
+        "logic": "5 日變化 = 今日淨部位 − 5 個交易日前淨部位，再依歷史分布轉成 0–100 分。",
         "direction": "加多或減空代表改善，分數越高。",
     },
     "tx_basis": {
         "purpose": "觀察期貨相對現貨的樂觀或保守程度。",
-        "window": "當日近月台指期與 TAIEX。",
-        "logic": "Basis = 台指期近月價格 − TAIEX。",
+        "window": "原始值：期現貨價差（點）；歷史分布：近 3 年（v0.1 初始假設）。",
+        "logic": "Basis = 台指期近月價格 − TAIEX，再與歷史分布比較轉成 0–100 分。",
         "direction": "正價差方向通常偏多，負價差方向通常偏空。",
     },
     "txo_oi_pcr": {
         "purpose": "觀察選擇權未平倉量的多空與避險結構。",
-        "window": "當日 Put OI 與 Call OI。",
-        "logic": "OI PCR = Put OI / Call OI，再依歷史分布與模型方向轉成分數。",
+        "window": "原始值：Put OI / Call OI（倍）；歷史分布：近 3 年（v0.1 初始假設）。",
+        "logic": "OI PCR = Put OI / Call OI，再依歷史分布與模型方向轉成 0–100 分。",
         "direction": "依 v0.1 歷史分布判斷；極端值不直接等同單一多空方向。",
     },
     "taiwan_vix": {
         "purpose": "觀察市場波動與恐慌程度。",
-        "window": "近一年歷史分布。",
-        "logic": "VIX Score = 100 − VIX 歷史百分位。",
+        "window": "原始值：Taiwan VIX 收盤（點）；歷史分布：近 1 年（v0.1 初始假設）。",
+        "logic": "VIX Score = 100 − VIX 歷史百分位；原始 VIX 越高，轉換後分數通常越低。",
         "direction": "VIX 越低、風險越低，分數越高。",
     },
 }
@@ -161,6 +180,8 @@ __all__ = [
     "FACTOR_CATEGORIES",
     "FACTOR_EXPLANATIONS",
     "FACTOR_LABELS",
+    "FACTOR_RAW_METADATA",
+    "SCORE_INTERPRETATION",
     "DashboardFactorRow",
     "DashboardSnapshot",
     "build_snapshot",

@@ -40,6 +40,13 @@ class MarketScoreRecord:
                 "score": factor["score"],
                 "status": factor["score_status"],
                 "reason": factor["score_reason"],
+                # Keep the source-side factor evidence next to the normalized
+                # score so a dashboard can explain the unit conversion without
+                # recalculating the factor or querying source observations.
+                "raw_value": factor["value"],
+                "raw_values": factor["values"],
+                "window_start": factor["window_start"],
+                "window_end": factor["window_end"],
             }
             for factor_id, factor in report["factors"].items()
         }

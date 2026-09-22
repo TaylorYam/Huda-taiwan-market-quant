@@ -20,6 +20,8 @@ from src.dashboard.view_model import (
     FACTOR_CATEGORIES,
     FACTOR_EXPLANATIONS,
     FACTOR_LABELS,
+    FACTOR_RAW_METADATA,
+    SCORE_INTERPRETATION,
 )
 
 SOURCE_DATASETS = {
@@ -75,6 +77,46 @@ def display_score(value: object, status: str) -> str:
     )
 
 
+def _format_raw_number(
+    value: object, *, suffix: str = "", signed: bool = False
+) -> str | None:
+    number = _finite_number(value)
+    if number is None:
+        return None
+    prefix = "+" if signed and number > 0 else ""
+    return f"{prefix}{number:,.1f}{suffix}"
+
+
+def factor_raw_display(factor_id: object, factor: Mapping[str, object]) -> str:
+    """Explain a persisted raw factor input without recalculating it."""
+
+    if factor.get("status") != "available":
+        return "不可用"
+    metadata = FACTOR_RAW_METADATA.get(str(factor_id), {})
+    unit = str(metadata.get("unit") or "")
+    raw_value = factor.get("raw_value")
+    raw_values = factor.get("raw_values")
+    values = raw_values if isinstance(raw_values, Mapping) else {}
+
+    if str(factor_id) == "taiex_ma20_ma60_trend":
+        parts = []
+        for key, label in (("close", "收盤"), ("ma20", "MA20"), ("ma60", "MA60")):
+            formatted = _format_raw_number(values.get(key), suffix=f" {unit}")
+            if formatted is None:
+                return "原始值尚未儲存"
+            parts.append(f"{label} {formatted}")
+        return "；".join(parts)
+    if str(factor_id) in {"taiex_20d_momentum", "foreign_cash_5d"}:
+        formatted = _format_raw_number(
+            float(raw_value) * 100 if _finite_number(raw_value) is not None else None,
+            suffix=unit,
+            signed=True,
+        )
+    else:
+        formatted = _format_raw_number(raw_value, suffix=f" {unit}", signed=True)
+    return formatted or "原始值尚未儲存"
+
+
 def factor_rows(record: Mapping[str, object]) -> list[dict]:
     """Format persisted factor JSON without trusting its shape.
 
@@ -99,6 +141,7 @@ def factor_rows(record: Mapping[str, object]) -> list[dict]:
                 "因子": FACTOR_LABELS.get(factor_id, str(factor_id)),
                 "狀態": status,
                 "分數": display_score(factor.get("score"), status),
+                "原始值": factor_raw_display(factor_id, factor),
                 "原因": (
                     "資料格式錯誤"
                     if malformed
@@ -252,13 +295,13 @@ def factor_table_markup(record: Mapping[str, object] | None) -> str:
     if record is None:
         return ""
     rows = factor_rows(record)
-    headers = ("分類", "因子", "狀態", "分數", "原因")
+    headers = ("分類", "因子", "狀態", "分數（0–100）", "原始值", "原因")
     header_markup = "".join(f"<th>{escape(header)}</th>" for header in headers)
     body_markup_rows = []
     for row in rows:
         cells = []
         for header in headers:
-            value = row.get(header)
+            value = row.get("分數") if header == "分數（0–100）" else row.get(header)
             cells.append(f"<td>{escape(str(value if value is not None else '—'))}</td>")
         body_markup_rows.append("<tr>" + "".join(cells) + "</tr>")
     body_markup = "".join(body_markup_rows)
@@ -267,7 +310,7 @@ def factor_table_markup(record: Mapping[str, object] | None) -> str:
         "<h2>分類與因子</h2>"
         f'<div class="table-scroll"><table><thead><tr>{header_markup}</tr></thead>'
         f"<tbody>{body_markup}</tbody></table></div>"
-        '<p class="table-note">顯示已儲存的因子分數；目前持久化格式未包含原始值或分類總分，本頁不重新計算。</p>'
+        f'<p class="table-note">{escape(SCORE_INTERPRETATION)} 原始值只顯示已儲存的計算證據，本頁不重新計算。</p>'
         "</section>"
     )
 
@@ -337,6 +380,22 @@ def build_tradingview_kline_html(
     factor_payload = json.dumps(
         factor_rows_payload, ensure_ascii=False, separators=(",", ":")
     )
+    factor_current_payload: dict[str, dict[str, str]] = {}
+    if factor_table is not None:
+        raw_factors = factor_table.get("factor_scores_json")
+        factors = raw_factors if isinstance(raw_factors, Mapping) else {}
+        for factor_id, factor_label in FACTOR_LABELS.items():
+            raw_factor = factors.get(factor_id)
+            factor = raw_factor if isinstance(raw_factor, Mapping) else {}
+            factor_current_payload[factor_label] = {
+                "score": display_score(
+                    factor.get("score"), factor.get("status", "unavailable")
+                ),
+                "raw": factor_raw_display(factor_id, factor),
+            }
+    factor_current_json = json.dumps(
+        factor_current_payload, ensure_ascii=False, separators=(",", ":")
+    )
     explanation_payload = json.dumps(
         {
             FACTOR_LABELS.get(factor_id, factor_id): dict(details)
@@ -349,16 +408,18 @@ def build_tradingview_kline_html(
     )
     factor_table_html = factor_table_markup(factor_table)
     score_markup = (
-        """<div class="score-title">Market Score（副圖）</div>
-    <div id="score-chart" class="pane" aria-label="Market Score 趨勢圖"></div>"""
+        """<div class="score-title">Market Score（副圖，0–100）</div>
+    <div id="score-chart" class="pane" aria-label="Market Score 0–100 趨勢圖"></div>"""
         if score_rows
         else ""
     )
     factor_markup = (
-        """<section class="factor-panel" aria-label="各因子分數趨勢">
-      <div class="factor-title">各因子分數趨勢</div>
+        f"""<section class="factor-panel" aria-label="各因子分數趨勢">
+      <div class="score-notice">{escape(SCORE_INTERPRETATION)}</div>
+      <div class="factor-title">各因子分數趨勢（0–100）</div>
       <div id="factor-tabs" class="factor-tabs" role="tablist"></div>
       <div id="factor-chart" class="pane" aria-label="選定因子趨勢圖"></div>
+      <div id="factor-current" class="factor-current" aria-live="polite"></div>
       <div id="factor-explanation" class="factor-explanation" aria-live="polite"></div>
     </section>"""
         if factor_rows_payload
@@ -398,11 +459,13 @@ def build_tradingview_kline_html(
     .factor-table tr:last-child td { border-bottom: 0; }
     .table-note { margin: 5px 0 0; color: #9ca3af; font-size: 11px; }
     .factor-panel { flex: 0 0 430px; min-height: 430px; display: flex; flex-direction: column; border-top: 1px solid #e5e7eb; }
+    .score-notice { margin: 8px 14px 0; padding: 7px 9px; border-left: 3px solid #2563eb; background: #eff6ff; color: #1e3a8a; font-size: 11px; line-height: 1.45; }
     .factor-title { height: 26px; padding: 5px 14px 0; box-sizing: border-box; color: #4b5563; font-size: 12px; }
     .factor-tabs { display: flex; gap: 4px; height: 36px; padding: 2px 14px 5px; box-sizing: border-box; overflow-x: auto; }
     .factor-tab { flex: 0 0 auto; border: 1px solid #d1d5db; border-radius: 5px; background: #ffffff; color: #4b5563; padding: 3px 9px; font: inherit; font-size: 12px; cursor: pointer; }
     .factor-tab[aria-selected="true"] { border-color: var(--factor-color, #2563eb); background: #eff6ff; color: var(--factor-color, #1d4ed8); font-weight: 600; }
     #factor-chart { flex: 0 0 190px; min-height: 150px; }
+    .factor-current { margin: 6px 14px 0; color: #1f2937; font-size: 12px; font-weight: 600; }
     .factor-explanation { margin: 8px 14px 12px; padding: 9px 11px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f8fafc; color: #374151; font-size: 12px; line-height: 1.55; }
     .factor-explanation-title { color: #111827; font-size: 13px; font-weight: 700; margin-bottom: 6px; }
     .factor-explanation-grid { display: grid; grid-template-columns: 80px 1fr; gap: 4px 10px; }
@@ -447,6 +510,9 @@ def build_tradingview_kline_html(
     const factorData = """
         + factor_payload
         + """;
+    const factorCurrent = """
+        + factor_current_json
+        + """;
     const factorExplanations = """
         + explanation_payload
         + """;
@@ -468,6 +534,7 @@ def build_tradingview_kline_html(
     const scoreElement = document.getElementById('score-chart');
     const factorTabsElement = document.getElementById('factor-tabs');
     const factorElement = document.getElementById('factor-chart');
+    const factorCurrentElement = document.getElementById('factor-current');
     const factorExplanationElement = document.getElementById('factor-explanation');
     const rangeControlsElement = document.getElementById('range-controls');
     const interactionOptions = {
@@ -611,6 +678,10 @@ def build_tradingview_kline_html(
         row('計算邏輯', explanation.logic) +
         row('分數方向', explanation.direction) +
         '</dl>';
+      if (factorCurrentElement) {
+        const current = factorCurrent[factorLabel] || {};
+        factorCurrentElement.textContent = '目前分數：' + (current.score || 'unavailable') + ' · 原始值：' + (current.raw || '原始值尚未儲存');
+      }
     };
     const selectFactor = (factorLabel) => {
       if (!factorChart || !factorSeries) return;
@@ -666,6 +737,7 @@ def build_tradingview_kline_html(
         button.dataset.factor = factorLabel;
         button.setAttribute('role', 'tab');
         button.setAttribute('aria-selected', 'false');
+        button.title = '顯示歷史分布轉換後的 0–100 分數';
         button.style.setProperty('--factor-color', factorColorByLabel.get(factorLabel) || factorPalette[0]);
         button.textContent = factorLabel;
         button.addEventListener('click', () => selectFactor(factorLabel));
@@ -865,7 +937,7 @@ def render_score(record: dict | None, score_rows: object = ()) -> None:
     summary_columns = st.columns([1.2, 1, 1, 1])
     with summary_columns[0]:
         st.metric(
-            "Market Score",
+            "Market Score（0–100）",
             score,
             delta=(f"{delta:+.1f}" if delta is not None else None),
         )
@@ -885,7 +957,10 @@ def render_score(record: dict | None, score_rows: object = ()) -> None:
         st.metric("資料截至", record.get("target_date") or "未記錄")
     with summary_columns[3]:
         st.metric("模型版本", record.get("model_version") or "未記錄")
-    st.caption("日變化比較上一個有有效 Market Score 的日期；資料截至只顯示交易日期。")
+    st.caption(
+        "Market Score 與各因子都是 0–100 的轉換分數，不是原始資料單位。"
+        "日變化比較上一個有有效 Market Score 的日期；資料截至只顯示交易日期。"
+    )
     if record.get("reason"):
         st.caption(f"評分狀態：{record['reason']}")
 

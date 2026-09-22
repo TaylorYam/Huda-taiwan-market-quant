@@ -32,6 +32,11 @@ and persisted by the daily scoring pipeline.
 ## Summary and quality states
 
 - Scores and factor values display to one decimal place.
+- Every factor score is labelled `分數（0–100）`. The page explains that this is
+  a historical-distribution or rule-based transformation, not the source unit.
+- New persisted score rows expose the raw factor input and unit next to the
+  normalized score. Older rows that do not contain raw evidence say
+  `原始值尚未儲存`; the dashboard never reconstructs it.
 - `資料截至` displays only the trading target date. Collection checkpoints and
   write timestamps are hidden from the public page.
 - Daily change compares the current available score with the previous available

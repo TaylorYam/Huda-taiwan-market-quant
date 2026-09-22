@@ -471,7 +471,13 @@ def build_tradingview_kline_html(
     const factorExplanationElement = document.getElementById('factor-explanation');
     const rangeControlsElement = document.getElementById('range-controls');
     const interactionOptions = {
-      crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+      crosshair: {
+        mode: LightweightCharts.CrosshairMode.Normal,
+        // Keep the horizontal price guide/label, but do not draw the
+        // blinking vertical guide that looks like a text caret on click.
+        vertLine: { visible: false, labelVisible: false },
+        horzLine: { visible: true, labelVisible: true }
+      },
       handleScroll: {
         mouseWheel: false,
         pressedMouseMove: true,

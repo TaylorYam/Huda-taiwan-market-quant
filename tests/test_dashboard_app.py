@@ -12,6 +12,7 @@ from src.dashboard.app import (
     display_score,
     factor_history_frame,
     factor_rows,
+    previous_score_delta,
     score_history_frame,
     taiex_ohlc_frame,
 )
@@ -125,9 +126,11 @@ def test_persisted_result_and_metadata(monkeypatch, status, score):
     before = deepcopy(record)
     app, _ = run_app(monkeypatch, record)
     assert app.metric[0].value == ("72.0 / 100" if score else "unavailable")
+    assert app.metric[2].value == "2026-09-17"
     assert len(app.dataframe[0].value) == len(SOURCE_DATASETS)
-    assert "2026-09-17T08:05" in " ".join(t.value for t in app.text)
-    assert "2026-09-17T08:00" in " ".join(t.value for t in app.text)
+    rendered_text = " ".join(t.value for t in app.text)
+    assert "2026-09-17T08:05" not in rendered_text
+    assert "2026-09-17T08:00" not in rendered_text
     assert record == before
 
 
@@ -207,6 +210,21 @@ def test_score_history_does_not_turn_unavailable_into_zero():
     assert frame.loc[0, "Market Score"] == 68.0
     assert pd.isna(frame.loc[1, "Market Score"])
     assert frame["狀態"].tolist() == ["available", "unavailable"]
+
+
+def test_previous_score_delta_uses_previous_available_date():
+    record = {"status": "available", "score": 72, "target_date": "2026-09-18"}
+    rows = [
+        {"target_date": "2026-09-16", "status": "available", "score": 68},
+        {"target_date": "2026-09-17", "status": "unavailable", "score": None},
+    ]
+    assert previous_score_delta(record, rows) == 4.0
+    assert (
+        previous_score_delta(
+            record, [{"target_date": "2026-09-17", "status": "unavailable"}]
+        )
+        is None
+    )
 
 
 def test_display_scores_use_one_decimal_place():
@@ -309,7 +327,7 @@ def test_tradingview_kline_html_uses_visible_range_auto_scale_and_zoom():
     assert "setVisibleLogicalRange" in html
     assert "getVisibleRange" in html
     assert "setVisibleRange(visibleRange)" in html
-    assert "Market Score" not in html
+    assert "台灣加權指數 · Market Score" in html
 
 
 def test_tradingview_kline_html_links_market_score_pane():
@@ -378,6 +396,11 @@ def test_tradingview_kline_html_links_selected_factor_pane():
     assert "selectedFactorByTime" in html
     assert "factorChart.priceScale('right').applyOptions({ autoScale: true })" in html
     assert "clearCrosshairs" in html
+    assert 'id="factor-explanation"' in html
+    assert "factorExplanations" in html
+    assert "renderFactorExplanation" in html
+    assert "前值遞補" in html
+    assert "rangeOptions" in html
 
 
 def test_dashboard_renders_history_charts_without_recomputing(monkeypatch):
@@ -422,7 +445,7 @@ def test_dashboard_renders_history_charts_without_recomputing(monkeypatch):
     subheaders = [item.value for item in app.subheader]
     assert "台灣加權指數 · Market Score" in subheaders
     assert len(app.tabs) == 0
-    assert store.get_market_score_history.call_count == 2
+    assert store.get_market_score_history.call_count == 1
     store.get_observation_history.assert_called_once_with(
         "twse_taiex_daily_v1", limit=1000
     )

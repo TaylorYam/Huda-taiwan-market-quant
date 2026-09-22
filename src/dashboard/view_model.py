@@ -34,6 +34,60 @@ FACTOR_CATEGORIES = {
     "taiwan_vix": "市場風險",
 }
 
+# Keep the public explanation concise and aligned with the versioned model.
+# Source attribution and score-boundary details remain in the source-status
+# section and model documentation rather than being repeated under every chart.
+FACTOR_EXPLANATIONS = {
+    "taiex_ma20_ma60_trend": {
+        "purpose": "判斷大盤目前的主要趨勢方向。",
+        "window": "當日收盤、MA20 與 MA60。",
+        "logic": "依價格與兩條均線的排列給分：指數 > MA20 > MA60 為 100；指數 < MA20 < MA60 為 0；其餘排列依序給 25、50 或 75。",
+        "direction": "均線排列越偏多，分數越高。",
+    },
+    "taiex_20d_momentum": {
+        "purpose": "觀察最近約一個月的大盤價格強弱。",
+        "window": "20 個交易日。",
+        "logic": "20 日報酬率 = 今日 TAIEX / 20 個交易日前 TAIEX − 1，再與歷史分布比較轉成分數。",
+        "direction": "動能越強，分數越高。",
+    },
+    "foreign_cash_5d": {
+        "purpose": "觀察外資近期資金流入或流出。",
+        "window": "最近 5 個交易日。",
+        "logic": "外資 5 日累計買賣超 ÷ 市場 5 日成交金額，再與歷史分布比較。",
+        "direction": "買超比例越高，分數越高。",
+    },
+    "foreign_tx_net_position": {
+        "purpose": "判斷外資台指期目前相對偏多或偏空。",
+        "window": "當日外資台指期未平倉部位與歷史分布。",
+        "logic": "淨部位 = 多方未平倉 − 空方未平倉，再依外資自身歷史分布轉成分數。",
+        "direction": "相對淨多越高，分數越高。",
+    },
+    "foreign_tx_net_position_5d_change": {
+        "purpose": "觀察外資期貨部位正在往哪個方向變化。",
+        "window": "今日與 5 個交易日前。",
+        "logic": "5 日變化 = 今日淨部位 − 5 個交易日前淨部位。",
+        "direction": "加多或減空代表改善，分數越高。",
+    },
+    "tx_basis": {
+        "purpose": "觀察期貨相對現貨的樂觀或保守程度。",
+        "window": "當日近月台指期與 TAIEX。",
+        "logic": "Basis = 台指期近月價格 − TAIEX。",
+        "direction": "正價差方向通常偏多，負價差方向通常偏空。",
+    },
+    "txo_oi_pcr": {
+        "purpose": "觀察選擇權未平倉量的多空與避險結構。",
+        "window": "當日 Put OI 與 Call OI。",
+        "logic": "OI PCR = Put OI / Call OI，再依歷史分布與模型方向轉成分數。",
+        "direction": "依 v0.1 歷史分布判斷；極端值不直接等同單一多空方向。",
+    },
+    "taiwan_vix": {
+        "purpose": "觀察市場波動與恐慌程度。",
+        "window": "近一年歷史分布。",
+        "logic": "VIX Score = 100 − VIX 歷史百分位。",
+        "direction": "VIX 越低、風險越低，分數越高。",
+    },
+}
+
 
 @dataclass(frozen=True)
 class DashboardFactorRow:
@@ -105,6 +159,7 @@ def build_snapshot(result: DailyScoreResult) -> DashboardSnapshot:
 
 __all__ = [
     "FACTOR_CATEGORIES",
+    "FACTOR_EXPLANATIONS",
     "FACTOR_LABELS",
     "DashboardFactorRow",
     "DashboardSnapshot",

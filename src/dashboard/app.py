@@ -16,7 +16,11 @@ import streamlit.components.v1 as components
 from requests.exceptions import RequestException
 
 from src.dashboard.data import DashboardDataStore
-from src.dashboard.view_model import FACTOR_CATEGORIES, FACTOR_LABELS
+from src.dashboard.view_model import (
+    FACTOR_CATEGORIES,
+    FACTOR_EXPLANATIONS,
+    FACTOR_LABELS,
+)
 
 SOURCE_DATASETS = {
     "twse_taiex_daily_v1": "TWSE 加權指數",
@@ -37,6 +41,14 @@ SOURCE_ATTRIBUTION = (
 
 TAIEX_DATASET_ID = "twse_taiex_daily_v1"
 CHART_LIMIT = 1000
+
+WARNING_ICON_SVG = """
+<svg class="warning-icon" width="18" height="18" viewBox="0 0 24 24" role="img" aria-label="資料品質警示" style="vertical-align:-4px;color:#b45309">
+  <path d="M12 3 2.8 20h18.4L12 3Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+  <path d="M12 9v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  <circle cx="12" cy="17.2" r="1" fill="currentColor"/>
+</svg>
+"""
 
 READ_ERRORS = (
     RequestException,
@@ -160,6 +172,32 @@ def score_history_frame(rows: object) -> pd.DataFrame:
     return pd.DataFrame(output, columns=["日期", "Market Score", "狀態"])
 
 
+def previous_score_delta(
+    record: Mapping[str, object] | None, rows: object
+) -> float | None:
+    """Return the change from the previous date that had an available score."""
+
+    if not isinstance(record, Mapping) or record.get("status") != "available":
+        return None
+    current = _finite_number(record.get("score"), minimum=0, maximum=100)
+    target = record.get("target_date")
+    if current is None or not isinstance(target, str) or not target:
+        return None
+    candidates: list[tuple[str, float]] = []
+    for row in _as_rows(rows):
+        row_date = row.get("target_date")
+        if not isinstance(row_date, str) or row_date >= target:
+            continue
+        if row.get("status") != "available":
+            continue
+        score = _finite_number(row.get("score"), minimum=0, maximum=100)
+        if score is not None:
+            candidates.append((row_date, score))
+    if not candidates:
+        return None
+    return round(current - max(candidates, key=lambda item: item[0])[1], 1)
+
+
 def taiex_ohlc_frame(rows: object) -> pd.DataFrame:
     """Build TAIEX OHLC rows; incomplete or non-available rows are omitted."""
 
@@ -245,6 +283,7 @@ def build_tradingview_kline_html(
     score_plot: pd.DataFrame | None = None,
     factor_plot: pd.DataFrame | None = None,
     factor_table: Mapping[str, object] | None = None,
+    factor_explanations: Mapping[str, Mapping[str, str]] | None = None,
 ) -> str | None:
     """Build one linked Lightweight Charts component for all history panes.
 
@@ -298,6 +337,16 @@ def build_tradingview_kline_html(
     factor_payload = json.dumps(
         factor_rows_payload, ensure_ascii=False, separators=(",", ":")
     )
+    explanation_payload = json.dumps(
+        {
+            FACTOR_LABELS.get(factor_id, factor_id): dict(details)
+            for factor_id, details in (
+                factor_explanations or FACTOR_EXPLANATIONS
+            ).items()
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
     factor_table_html = factor_table_markup(factor_table)
     score_markup = (
         """<div class="score-title">Market Score（副圖）</div>
@@ -310,6 +359,7 @@ def build_tradingview_kline_html(
       <div class="factor-title">各因子分數趨勢</div>
       <div id="factor-tabs" class="factor-tabs" role="tablist"></div>
       <div id="factor-chart" class="pane" aria-label="選定因子趨勢圖"></div>
+      <div id="factor-explanation" class="factor-explanation" aria-live="polite"></div>
     </section>"""
         if factor_rows_payload
         else ""
@@ -324,18 +374,22 @@ def build_tradingview_kline_html(
     :root { color-scheme: light; }
     html, body { margin: 0; padding: 0; background: #ffffff; }
     body { overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    .shell { width: 100%; height: 1020px; display: flex; flex-direction: column; background: #ffffff; }
-    .legend { height: 42px; padding: 8px 14px 0; box-sizing: border-box; color: #1f2937; font-size: 13px; line-height: 20px; }
+    .shell { width: 100%; height: 1320px; display: flex; flex-direction: column; background: #ffffff; }
+    .legend { min-height: 50px; padding: 9px 14px 4px; box-sizing: border-box; color: #1f2937; font-size: 13px; line-height: 20px; }
     .title { font-weight: 700; letter-spacing: .01em; }
     .values { color: #4b5563; margin-left: 12px; }
     .values span { margin-right: 10px; }
+    .fill-note { color: #b45309; font-size: 11px; }
     .values .positive { color: #0f9f91; }
     .values .negative { color: #e05252; }
+    .range-controls { display: flex; gap: 5px; align-items: center; margin-top: 5px; overflow-x: auto; }
+    .range-button { border: 1px solid #d1d5db; border-radius: 4px; background: #ffffff; color: #4b5563; padding: 3px 8px; font: inherit; font-size: 11px; cursor: pointer; }
+    .range-button[aria-pressed="true"] { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; font-weight: 600; }
     .pane { width: 100%; min-height: 0; }
-    #price-chart { flex: 0 0 360px; min-height: 300px; }
+    #price-chart { flex: 0 0 410px; min-height: 300px; }
     .score-title { height: 26px; padding: 5px 14px 0; box-sizing: border-box; color: #4b5563; font-size: 12px; border-top: 1px solid #e5e7eb; }
-    #score-chart { flex: 0 0 135px; }
-    .factor-table { flex: 0 0 235px; min-height: 0; padding: 10px 14px 8px; border-top: 1px solid #e5e7eb; box-sizing: border-box; }
+    #score-chart { flex: 0 0 150px; }
+    .factor-table { flex: 0 0 245px; min-height: 0; padding: 10px 14px 8px; border-top: 1px solid #e5e7eb; box-sizing: border-box; }
     .factor-table h2 { margin: 0 0 6px; color: #1f2937; font-size: 16px; line-height: 22px; }
     .table-scroll { max-height: 188px; overflow: auto; border: 1px solid #e5e7eb; border-radius: 8px; }
     .factor-table table { width: 100%; border-collapse: collapse; color: #374151; font-size: 12px; }
@@ -343,19 +397,35 @@ def build_tradingview_kline_html(
     .factor-table th { position: sticky; top: 0; background: #f8fafc; color: #6b7280; font-weight: 600; }
     .factor-table tr:last-child td { border-bottom: 0; }
     .table-note { margin: 5px 0 0; color: #9ca3af; font-size: 11px; }
-    .factor-panel { flex: 0 0 200px; min-height: 200px; display: flex; flex-direction: column; border-top: 1px solid #e5e7eb; }
+    .factor-panel { flex: 0 0 430px; min-height: 430px; display: flex; flex-direction: column; border-top: 1px solid #e5e7eb; }
     .factor-title { height: 26px; padding: 5px 14px 0; box-sizing: border-box; color: #4b5563; font-size: 12px; }
     .factor-tabs { display: flex; gap: 4px; height: 36px; padding: 2px 14px 5px; box-sizing: border-box; overflow-x: auto; }
     .factor-tab { flex: 0 0 auto; border: 1px solid #d1d5db; border-radius: 5px; background: #ffffff; color: #4b5563; padding: 3px 9px; font: inherit; font-size: 12px; cursor: pointer; }
     .factor-tab[aria-selected="true"] { border-color: var(--factor-color, #2563eb); background: #eff6ff; color: var(--factor-color, #1d4ed8); font-weight: 600; }
-    #factor-chart { flex: 1 1 auto; min-height: 138px; }
+    #factor-chart { flex: 0 0 190px; min-height: 150px; }
+    .factor-explanation { margin: 8px 14px 12px; padding: 9px 11px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f8fafc; color: #374151; font-size: 12px; line-height: 1.55; }
+    .factor-explanation-title { color: #111827; font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+    .factor-explanation-grid { display: grid; grid-template-columns: 80px 1fr; gap: 4px 10px; }
+    .factor-explanation-grid dt { color: #6b7280; font-weight: 600; }
+    .factor-explanation-grid dd { margin: 0; }
+    @media (max-width: 720px) {
+      .shell { height: 1320px; }
+      #price-chart { flex-basis: 330px; }
+      #score-chart { flex-basis: 130px; }
+      .factor-panel { flex-basis: 455px; min-height: 455px; }
+      #factor-chart { flex-basis: 170px; }
+      .factor-explanation-grid { grid-template-columns: 68px 1fr; }
+      .values { display: block; margin-left: 0; }
+    }
   </style>
 </head>
 <body>
   <div class="shell">
     <div class="legend" id="legend">
-      <span class="title">TSEC WEIGHTED INDEX · 1D</span>
+      <span class="title">台灣加權指數 · Market Score</span>
       <span class="values" id="values"></span>
+      <span class="fill-note" id="fill-note" aria-live="polite"></span>
+      <div class="range-controls" id="range-controls" role="group" aria-label="顯示期間"></div>
     </div>
     <div id="price-chart" class="pane" aria-label="台指大盤日 K 線圖"></div>
     """
@@ -377,21 +447,29 @@ def build_tradingview_kline_html(
     const factorData = """
         + factor_payload
         + """;
+    const factorExplanations = """
+        + explanation_payload
+        + """;
     const scoreByTime = new Map(scoreData.map((point) => [point.time, point.value]));
     const alignedScoreByTime = new Map();
+    const scoreFillData = [];
     let previousScore;
     const alignedScoreData = candleData.map((point) => {
       const score = scoreByTime.get(point.time);
       if (score !== undefined) previousScore = score;
       if (previousScore === undefined) return { time: point.time };
       alignedScoreByTime.set(point.time, previousScore);
-      return { time: point.time, value: previousScore };
+      if (score === undefined) scoreFillData.push({ time: point.time, value: previousScore });
+      return score === undefined ? { time: point.time } : { time: point.time, value: score };
     });
     const priceElement = document.getElementById('price-chart');
     const valuesElement = document.getElementById('values');
+    const fillNoteElement = document.getElementById('fill-note');
     const scoreElement = document.getElementById('score-chart');
     const factorTabsElement = document.getElementById('factor-tabs');
     const factorElement = document.getElementById('factor-chart');
+    const factorExplanationElement = document.getElementById('factor-explanation');
+    const rangeControlsElement = document.getElementById('range-controls');
     const interactionOptions = {
       crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
       handleScroll: {
@@ -466,6 +544,7 @@ def build_tradingview_kline_html(
     const charts = [priceChart];
     let scoreChart = null;
     let scoreSeries = null;
+    let scoreFillSeries = null;
     if (scoreElement && scoreData.length) {
       scoreChart = LightweightCharts.createChart(scoreElement, chartOptions(true));
       scoreSeries = scoreChart.addLineSeries({
@@ -476,6 +555,17 @@ def build_tradingview_kline_html(
         crosshairMarkerVisible: true
       });
       scoreSeries.setData(alignedScoreData);
+      if (scoreFillData.length) {
+        scoreFillSeries = scoreChart.addLineSeries({
+          color: '#93c5fd',
+          lineWidth: 2,
+          lineStyle: LightweightCharts.LineStyle.Dashed,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: false
+        });
+        scoreFillSeries.setData(scoreFillData);
+      }
       scoreChart.applyOptions({
         rightPriceScale: { scaleMargins: { top: 0.12, bottom: 0.12 } }
       });
@@ -491,11 +581,13 @@ def build_tradingview_kline_html(
     }
     let factorChart = null;
     let factorSeries = null;
+    let factorFillSeries = null;
     let selectedFactorByTime = new Map();
+    let selectedFactorFilledTimes = new Set();
     const factorLabels = Object.keys(factorData);
     const factorPalette = [
-      '#2563eb', '#dc2626', '#059669', '#d97706',
-      '#7c3aed', '#0891b2', '#db2777', '#4f46e5'
+      '#0f766e', '#d97706', '#7c3aed', '#dc2626',
+      '#0891b2', '#65a30d', '#db2777', '#4f46e5'
     ];
     const factorColorByLabel = new Map(
       factorLabels.map((label, index) => [label, factorPalette[index % factorPalette.length]])
@@ -506,20 +598,47 @@ def build_tradingview_kline_html(
         button.setAttribute('aria-selected', button.dataset.factor === selectedLabel ? 'true' : 'false');
       });
     };
+    const renderFactorExplanation = (factorLabel) => {
+      if (!factorExplanationElement) return;
+      const explanation = factorExplanations[factorLabel] || {};
+      const row = (label, value) =>
+        '<dt>' + label + '</dt><dd>' + (value || '—') + '</dd>';
+      factorExplanationElement.innerHTML =
+        '<div class="factor-explanation-title">' + factorLabel + ' · 因子說明</div>' +
+        '<dl class="factor-explanation-grid">' +
+        row('判斷用途', explanation.purpose) +
+        row('資料窗口', explanation.window) +
+        row('計算邏輯', explanation.logic) +
+        row('分數方向', explanation.direction) +
+        '</dl>';
+    };
     const selectFactor = (factorLabel) => {
       if (!factorChart || !factorSeries) return;
       const rows = factorData[factorLabel] || [];
       const visibleRange = factorChart.timeScale().getVisibleRange();
       factorSeries.setData(rows);
       factorSeries.applyOptions({ color: factorColorByLabel.get(factorLabel) || factorPalette[0] });
+      const filledRows = [];
+      let previousValue;
+      rows.forEach((point) => {
+        if (point.value !== undefined) {
+          previousValue = point.value;
+        } else if (previousValue !== undefined) {
+          filledRows.push({ time: point.time, value: previousValue });
+        }
+      });
+      if (factorFillSeries) {
+        factorFillSeries.setData(filledRows);
+        factorFillSeries.applyOptions({ color: factorColorByLabel.get(factorLabel) || factorPalette[0] });
+      }
+      selectedFactorFilledTimes = new Set(filledRows.map((point) => point.time));
       selectedFactorByTime = new Map(
-        rows
-          .filter((point) => point.value !== undefined)
-          .map((point) => [point.time, point.value])
+        [...rows.filter((point) => point.value !== undefined), ...filledRows].map((point) => [point.time, point.value])
       );
       factorChart.priceScale('right').applyOptions({ autoScale: true });
       if (visibleRange) factorChart.timeScale().setVisibleRange(visibleRange);
       updateFactorButtons(factorLabel);
+      renderFactorExplanation(factorLabel);
     };
     if (factorElement && factorLabels.length) {
       factorChart = LightweightCharts.createChart(factorElement, chartOptions(true));
@@ -529,6 +648,15 @@ def build_tradingview_kline_html(
         priceLineVisible: false,
         lastValueVisible: true,
         crosshairMarkerVisible: true,
+        priceFormat: { type: 'price', precision: 1, minMove: 0.1 }
+      });
+      factorFillSeries = factorChart.addLineSeries({
+        color: factorColorByLabel.get(factorLabels[0]) || factorPalette[0],
+        lineWidth: 2,
+        lineStyle: LightweightCharts.LineStyle.Dashed,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
         priceFormat: { type: 'price', precision: 1, minMove: 0.1 }
       });
       factorLabels.forEach((factorLabel) => {
@@ -545,6 +673,35 @@ def build_tradingview_kline_html(
       });
       selectFactor(factorLabels[0]);
       charts.push(factorChart);
+    }
+    const rangeOptions = [
+      ['1M', 22], ['3M', 65], ['6M', 130], ['1Y', 252], ['全部', null]
+    ];
+    let selectedRange = '3M';
+    const updateRangeButtons = () => {
+      if (!rangeControlsElement) return;
+      rangeControlsElement.querySelectorAll('button').forEach((button) => {
+        button.setAttribute('aria-pressed', button.dataset.range === selectedRange ? 'true' : 'false');
+      });
+    };
+    const applyRange = (label, bars) => {
+      selectedRange = label;
+      const start = bars === null ? 0 : Math.max(0, candleData.length - bars);
+      const visibleRange = { from: start, to: candleData.length + 8 };
+      charts.forEach((chart) => chart.timeScale().setVisibleLogicalRange(visibleRange));
+      updateRangeButtons();
+    };
+    if (rangeControlsElement) {
+      rangeOptions.forEach(([label, bars]) => {
+        const button = document.createElement('button');
+        button.className = 'range-button';
+        button.type = 'button';
+        button.dataset.range = label;
+        button.setAttribute('aria-pressed', 'false');
+        button.textContent = label;
+        button.addEventListener('click', () => applyRange(label, bars));
+        rangeControlsElement.appendChild(button);
+      });
     }
     let syncingRange = false;
     charts.forEach((source) => {
@@ -578,12 +735,21 @@ def build_tradingview_kline_html(
       if (!key) {
         clearCrosshairs();
         renderValues(latest);
+        if (fillNoteElement) {
+          fillNoteElement.textContent = '';
+          fillNoteElement.title = '';
+        }
         syncingCrosshair = false;
         return;
       }
       const candle = candleByTime.get(key);
       const score = alignedScoreByTime.get(key);
       const factor = selectedFactorByTime.get(key);
+      if (fillNoteElement) {
+        const isFilled = scoreFillData.some((point) => point.time === key) || selectedFactorFilledTimes.has(key);
+        fillNoteElement.textContent = isFilled ? ' · 前值遞補' : '';
+        fillNoteElement.title = isFilled ? '此日期的圖表數值沿用前一筆可用值。' : '';
+      }
       if (candle) {
         priceChart.setCrosshairPosition(candle.close, param.time, candles);
         renderValues(candle);
@@ -605,8 +771,7 @@ def build_tradingview_kline_html(
     priceChart.subscribeCrosshairMove(syncCrosshair);
     if (scoreChart) scoreChart.subscribeCrosshairMove(syncCrosshair);
     if (factorChart) factorChart.subscribeCrosshairMove(syncCrosshair);
-    const start = Math.max(0, candleData.length - 180);
-    const initialRange = { from: start, to: candleData.length + 8 };
+    const initialRange = { from: Math.max(0, candleData.length - 65), to: candleData.length + 8 };
     priceChart.timeScale().setVisibleLogicalRange(initialRange);
     const initialVisibleRange = priceChart.timeScale().getVisibleRange();
     if (scoreChart && initialVisibleRange) {
@@ -615,6 +780,7 @@ def build_tradingview_kline_html(
     if (factorChart && initialVisibleRange) {
       factorChart.timeScale().setVisibleRange(initialVisibleRange);
     }
+    updateRangeButtons();
   </script>
 </body>
 </html>
@@ -623,16 +789,19 @@ def build_tradingview_kline_html(
 
 
 def render_history_charts(
-    store: DashboardDataStore, latest_score: dict | None = None
+    store: DashboardDataStore,
+    latest_score: dict | None = None,
+    score_rows: object | None = None,
 ) -> None:
     """Render read-only trend views from persisted rows only."""
 
     st.header("歷史趨勢")
-    try:
-        score_rows = store.get_market_score_history(limit=CHART_LIMIT)
-    except READ_ERRORS:
-        st.warning("無法讀取 Market Score 歷史，暫不顯示評分趨勢圖。")
-        score_rows = []
+    if score_rows is None:
+        try:
+            score_rows = store.get_market_score_history(limit=CHART_LIMIT)
+        except READ_ERRORS:
+            st.warning("無法讀取 Market Score 歷史，暫不顯示評分趨勢圖。")
+            score_rows = []
     score_frame = score_history_frame(score_rows)
     score_plot = score_frame.dropna(subset=["Market Score"])
 
@@ -643,11 +812,7 @@ def render_history_charts(
         taiex_rows = []
     ohlc = taiex_ohlc_frame(taiex_rows)
 
-    try:
-        factor_rows_history = store.get_market_score_history(limit=CHART_LIMIT)
-    except READ_ERRORS:
-        factor_rows_history = []
-    factor_frame = factor_history_frame(factor_rows_history)
+    factor_frame = factor_history_frame(score_rows)
     factor_columns = [column for column in factor_frame.columns if column != "日期"]
     factor_plot = (
         factor_frame.dropna(subset=factor_columns, how="all")
@@ -661,13 +826,14 @@ def render_history_charts(
         score_plot,
         factor_plot,
         latest_score,
+        FACTOR_EXPLANATIONS,
     )
     if kline_html is None:
         st.info("目前沒有可繪製的 TAIEX OHLC 資料。")
     else:
-        components.html(kline_html, height=1020, scrolling=False)
+        components.html(kline_html, height=1320, scrolling=False)
         st.caption(
-            "操作：滑鼠滾輪縮放時間範圍；按住滑鼠左鍵左右拖曳平移；K 線、Market Score 與選定因子會同步定位，各副圖 Y 軸依目前可見資料自動調整。"
+            "操作：可用 1M／3M／6M／1Y／全部切換期間；滑鼠滾輪縮放，按住滑鼠左鍵左右拖曳；K 線、Market Score 與選定因子共用日期游標，各副圖 Y 軸依目前可見資料自動調整。"
         )
     if score_plot.empty:
         st.info(
@@ -685,25 +851,43 @@ def render_history_charts(
         st.caption("因子分頁已整合至上方圖表；切換因子後會保留日期範圍並同步十字游標。")
 
 
-def render_score(record: dict | None) -> None:
+def render_score(record: dict | None, score_rows: object = ()) -> None:
     if record is None:
         st.info("尚無 Market Score（empty）。請由既有評分流程寫入結果後重新整理。")
         return
     status = record.get("status", "unavailable")
     score = display_score(record.get("score"), status)
     headline = (
-        (record.get("direction") or "Market Score")
-        if score != "unavailable"
-        else "Market Score 尚不可用"
+        record.get("direction") if score != "unavailable" else "Market Score 尚不可用"
     )
-    st.subheader(headline)
-    st.metric("Market Score", score)
-    st.text(f"狀態：{status} · 模型：{record.get('model_version', '未記錄')}")
-    st.text(f"Target（評分日期）：{record.get('target_date', '未記錄')}")
-    st.text(f"As-of（資訊截止）：{record.get('as_of') or '未記錄'}")
-    st.text(f"分數寫入時間：{record.get('created_at') or '未記錄'}")
+    delta = previous_score_delta(record, score_rows)
+    st.subheader("台灣加權指數 · Market Score")
+    summary_columns = st.columns([1.2, 1, 1, 1])
+    with summary_columns[0]:
+        st.metric(
+            "Market Score",
+            score,
+            delta=(f"{delta:+.1f}" if delta is not None else None),
+        )
+        if score == "unavailable":
+            reason = str(record.get("reason") or "目前缺少必要因子資料")
+            warning_title = f"資料品質需要注意：{reason}；請聯繫開發者。"
+            st.markdown(
+                '<div class="score-warning" title="{}">{}</div>'.format(
+                    escape(warning_title),
+                    WARNING_ICON_SVG + " <span>資料品質需要注意</span>",
+                ),
+                unsafe_allow_html=True,
+            )
+    with summary_columns[1]:
+        st.metric("市場狀態", headline or "未記錄")
+    with summary_columns[2]:
+        st.metric("資料截至", record.get("target_date") or "未記錄")
+    with summary_columns[3]:
+        st.metric("模型版本", record.get("model_version") or "未記錄")
+    st.caption("日變化比較上一個有有效 Market Score 的日期；資料截至只顯示交易日期。")
     if record.get("reason"):
-        st.text(f"原因：{record['reason']}")
+        st.caption(f"評分狀態：{record['reason']}")
 
 
 def _parse_source_timestamp(value: object) -> tuple[str, datetime | None]:
@@ -805,17 +989,23 @@ def main() -> None:
             latest_score = None
             try:
                 latest_score = store.get_latest_market_score()
-                render_score(latest_score)
             except READ_ERRORS:
                 st.error(
                     "無法讀取 Market Score。請維護者確認 market_scores 表、Data API 權限與網路連線。"
                 )
             try:
-                render_history_charts(store, latest_score)
+                score_rows = store.get_market_score_history(limit=CHART_LIMIT)
+            except READ_ERRORS:
+                score_rows = []
+                st.warning("無法讀取 Market Score 歷史，日變化與趨勢可能暫時無法顯示。")
+            render_score(latest_score, score_rows)
+            try:
+                render_history_charts(store, latest_score, score_rows)
             except READ_ERRORS:
                 st.warning("歷史趨勢暫時無法顯示；最新分數與來源狀態仍可查看。")
             try:
-                render_sources(store)
+                with st.expander("資料來源狀態", expanded=False):
+                    render_sources(store)
             except READ_ERRORS:
                 st.warning(
                     "無法讀取來源品質。請維護者確認 observations 表、Data API 權限與網路連線。"

@@ -320,6 +320,19 @@ TRADINGVIEW_LIBRARY_URL = (
     "dist/lightweight-charts.standalone.production.js"
 )
 
+CHART_IFRAME_STYLE = """
+<style data-huda-chart-iframe-style>
+iframe.stIFrame[title="st.iframe"],
+iframe.stIFrame[title="st.iframe"]:focus,
+iframe.stIFrame[title="st.iframe"]:focus-visible {
+  display: block !important;
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+</style>
+"""
+
 
 def build_tradingview_kline_html(
     ohlc: pd.DataFrame,
@@ -931,6 +944,10 @@ def render_history_charts(
         st.info("目前沒有可繪製的 TAIEX OHLC 資料。")
     else:
         components.html(kline_html, height=1600, scrolling=False)
+        # Streamlit hosts components.html in a focused iframe. Remove the
+        # browser focus frame so it cannot look like a caret spanning the
+        # chart, factor panel, and table below it.
+        st.markdown(CHART_IFRAME_STYLE, unsafe_allow_html=True)
         st.caption(
             "操作：可用 1M／3M／6M／1Y／全部切換期間；滑鼠滾輪縮放，按住滑鼠左鍵左右拖曳；K 線、Market Score 與選定因子共用日期游標，各副圖 Y 軸依目前可見資料自動調整。"
         )

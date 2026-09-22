@@ -37,15 +37,15 @@ FACTOR_CATEGORIES = {
 FACTOR_RAW_METADATA = {
     "taiex_ma20_ma60_trend": {"label": "收盤、MA20、MA60", "unit": "點"},
     "taiex_20d_momentum": {"label": "20 日報酬率", "unit": "%"},
-    "foreign_cash_5d": {"label": "外資 5 日買賣超比例", "unit": "%"},
+    "foreign_cash_5d": {"label": "外資 5 日買賣超金額", "unit": "元"},
     "foreign_tx_net_position": {"label": "外資台指期淨部位", "unit": "口"},
     "foreign_tx_net_position_5d_change": {
         "label": "外資台指期淨部位 5 日變化",
         "unit": "口",
     },
     "tx_basis": {"label": "期現貨價差", "unit": "點"},
-    "txo_oi_pcr": {"label": "Put / Call OI 比例", "unit": "倍"},
-    "taiwan_vix": {"label": "Taiwan VIX 收盤", "unit": "點"},
+    "txo_oi_pcr": {"label": "Put / Call OI 比率", "unit": "%"},
+    "taiwan_vix": {"label": "Taiwan VIX 收盤", "unit": ""},
 }
 
 SCORE_INTERPRETATION = (
@@ -71,8 +71,8 @@ FACTOR_EXPLANATIONS = {
     },
     "foreign_cash_5d": {
         "purpose": "觀察外資近期資金流入或流出。",
-        "window": "原始值：5 日買賣超比例（%）；歷史分布：近 3 年（v0.1 初始假設）。",
-        "logic": "外資 5 日累計買賣超 ÷ 市場 5 日成交金額，再與歷史分布比較轉成 0–100 分。",
+        "window": "原始值：5 日買賣超金額（元）；歷史分布：近 3 年（v0.1 初始假設）。",
+        "logic": "外資 5 日累計買賣超 ÷ 市場 5 日成交金額，再與歷史分布比較轉成 0–100 分；表格原始值顯示買賣超金額。",
         "direction": "買超比例越高，分數越高。",
     },
     "foreign_tx_net_position": {
@@ -95,13 +95,13 @@ FACTOR_EXPLANATIONS = {
     },
     "txo_oi_pcr": {
         "purpose": "觀察選擇權未平倉量的多空與避險結構。",
-        "window": "原始值：Put OI / Call OI（倍）；歷史分布：近 3 年（v0.1 初始假設）。",
-        "logic": "OI PCR = Put OI / Call OI，再依歷史分布與模型方向轉成 0–100 分。",
+        "window": "原始值：Put OI / Call OI（%）；歷史分布：近 3 年（v0.1 初始假設）。",
+        "logic": "OI PCR = Put OI / Call OI，表格以百分比呈現，再依歷史分布與模型方向轉成 0–100 分。",
         "direction": "依 v0.1 歷史分布判斷；極端值不直接等同單一多空方向。",
     },
     "taiwan_vix": {
         "purpose": "觀察市場波動與恐慌程度。",
-        "window": "原始值：Taiwan VIX 收盤（點）；歷史分布：近 1 年（v0.1 初始假設）。",
+        "window": "原始值：Taiwan VIX 收盤；歷史分布：近 1 年（v0.1 初始假設）。",
         "logic": "VIX Score = 100 − VIX 歷史百分位；原始 VIX 越高，轉換後分數通常越低。",
         "direction": "VIX 越低、風險越低，分數越高。",
     },

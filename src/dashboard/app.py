@@ -80,13 +80,17 @@ def display_score(value: object, status: str) -> str:
 
 
 def _format_raw_number(
-    value: object, *, suffix: str = "", signed: bool = False
+    value: object,
+    *,
+    suffix: str = "",
+    signed: bool = False,
+    decimals: int = 1,
 ) -> str | None:
     number = _finite_number(value)
     if number is None:
         return None
     prefix = "+" if signed and number > 0 else ""
-    return f"{prefix}{number:,.1f}{suffix}"
+    return f"{prefix}{number:,.{decimals}f}{suffix}"
 
 
 def factor_raw_display(factor_id: object, factor: Mapping[str, object]) -> str:
@@ -108,12 +112,38 @@ def factor_raw_display(factor_id: object, factor: Mapping[str, object]) -> str:
                 return "原始值尚未儲存"
             parts.append(f"{label} {formatted}")
         return "；".join(parts)
-    if str(factor_id) in {"taiex_20d_momentum", "foreign_cash_5d"}:
+    factor_name = str(factor_id)
+    if factor_name == "foreign_cash_5d":
+        formatted = _format_raw_number(
+            values.get("foreign_5d_net"),
+            suffix=f" {unit}",
+            signed=True,
+            decimals=0,
+        )
+    elif factor_name == "taiex_20d_momentum":
         formatted = _format_raw_number(
             float(raw_value) * 100 if _finite_number(raw_value) is not None else None,
             suffix=unit,
             signed=True,
         )
+    elif factor_name == "txo_oi_pcr":
+        pcr = values.get("oi_pcr", raw_value)
+        formatted = _format_raw_number(
+            float(pcr) * 100 if _finite_number(pcr) is not None else None,
+            suffix=unit,
+        )
+    elif factor_name in {
+        "foreign_tx_net_position",
+        "foreign_tx_net_position_5d_change",
+    }:
+        formatted = _format_raw_number(
+            raw_value,
+            suffix=f" {unit}",
+            signed=True,
+            decimals=0,
+        )
+    elif factor_name == "taiwan_vix":
+        formatted = _format_raw_number(raw_value, suffix=unit, signed=False)
     else:
         formatted = _format_raw_number(raw_value, suffix=f" {unit}", signed=True)
     return formatted or "原始值尚未儲存"

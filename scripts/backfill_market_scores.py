@@ -29,7 +29,7 @@ from src.factors.contracts import (
     TX_DATASET_ID,
     VIX_DATASET_ID,
 )
-from src.scoring.contracts import MODEL_VERSION
+from src.scoring.contracts import MODEL_VERSION, REQUIRED_FACTOR_IDS
 from src.scoring.history import DEFAULT_WINDOW_YEARS
 from src.scoring.pipeline import DailyScoreResult
 from src.scoring.writer import persist_market_score
@@ -63,6 +63,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--refresh-unavailable",
         action="store_true",
         help="Recalculate dates whose existing score status is unavailable",
+    )
+    parser.add_argument(
+        "--refresh-missing-raw",
+        action="store_true",
+        help="Update existing dates whose available factors lack raw evidence",
     )
     return parser
 
@@ -100,6 +105,56 @@ def existing_available_target_dates(rows: Iterable[Mapping[str, Any]]) -> set[st
     }
 
 
+def _factor_has_raw_evidence(factor: object) -> bool:
+    if not isinstance(factor, Mapping) or factor.get("status") != "available":
+        return False
+    raw_values = factor.get("raw_values")
+    if isinstance(raw_values, Mapping) and raw_values:
+        return True
+    return factor.get("raw_value") is not None
+
+
+def has_complete_raw_evidence(row: Mapping[str, Any]) -> bool:
+    """Return whether every available v0.1 factor retains its raw input."""
+
+    factors = row.get("factor_scores_json")
+    if not isinstance(factors, Mapping):
+        return False
+    return all(
+        _factor_has_raw_evidence(factors.get(factor_id))
+        for factor_id in REQUIRED_FACTOR_IDS
+    )
+
+
+def existing_target_dates_for_refresh(
+    rows: Iterable[Mapping[str, Any]],
+    *,
+    refresh_unavailable: bool,
+    refresh_missing_raw: bool,
+) -> set[str]:
+    """Select dates that should remain untouched for a requested refresh."""
+
+    latest_by_target: dict[str, Mapping[str, Any]] = {}
+    for row in rows:
+        target_date = row.get("target_date")
+        if isinstance(target_date, str) and target_date:
+            latest_by_target[target_date] = row
+
+    existing: set[str] = set()
+    for target_date, row in latest_by_target.items():
+        status = row.get("status")
+        if status == "unavailable" and refresh_unavailable:
+            continue
+        if (
+            status == "available"
+            and refresh_missing_raw
+            and not has_complete_raw_evidence(row)
+        ):
+            continue
+        existing.add(target_date)
+    return existing
+
+
 def summarize_results(
     results: Sequence[DailyScoreResult],
     *,
@@ -108,8 +163,10 @@ def summarize_results(
     skipped_existing_dates: int,
     write: bool,
     refresh_unavailable: bool = False,
+    refresh_missing_raw: bool = False,
     inserted: int = 0,
     duplicates: int = 0,
+    updated: int = 0,
 ) -> dict[str, Any]:
     """Create a bounded, safe summary suitable for Actions logs."""
 
@@ -150,8 +207,10 @@ def summarize_results(
         "skipped_existing_dates": skipped_existing_dates,
         "write_mode": write,
         "refresh_unavailable": refresh_unavailable,
+        "refresh_missing_raw": refresh_missing_raw,
         "inserted": inserted,
         "duplicates": duplicates,
+        "updated": updated,
     }
 
 
@@ -201,16 +260,22 @@ def main(argv: list[str] | None = None) -> int:
                 model_version=MODEL_VERSION,
                 start_date=start.isoformat(),
                 end_date=end.isoformat(),
+                include_factor_scores=args.refresh_missing_raw,
             )
             existing = existing_target_dates(score_rows)
-            if args.refresh_unavailable:
-                existing = existing_available_target_dates(score_rows)
+            if args.refresh_unavailable or args.refresh_missing_raw:
+                existing = existing_target_dates_for_refresh(
+                    score_rows,
+                    refresh_unavailable=args.refresh_unavailable,
+                    refresh_missing_raw=args.refresh_missing_raw,
+                )
             pending = [
                 result for result in results if result.target_date not in existing
             ]
             if args.write:
                 inserted = 0
                 duplicates = 0
+                updated = 0
                 for result in pending:
                     _, outcome = persist_market_score(store, result)
                     action = getattr(outcome, "action", None)
@@ -218,6 +283,8 @@ def main(argv: list[str] | None = None) -> int:
                         inserted += 1
                     elif action == "duplicate":
                         duplicates += 1
+                    elif action == "updated":
+                        updated += 1
                 summary = summarize_results(
                     results,
                     start_date=start.isoformat(),
@@ -225,8 +292,10 @@ def main(argv: list[str] | None = None) -> int:
                     skipped_existing_dates=len(results) - len(pending),
                     write=True,
                     refresh_unavailable=args.refresh_unavailable,
+                    refresh_missing_raw=args.refresh_missing_raw,
                     inserted=inserted,
                     duplicates=duplicates,
+                    updated=updated,
                 )
             else:
                 summary = summarize_results(
@@ -236,6 +305,7 @@ def main(argv: list[str] | None = None) -> int:
                     skipped_existing_dates=len(results) - len(pending),
                     write=False,
                     refresh_unavailable=args.refresh_unavailable,
+                    refresh_missing_raw=args.refresh_missing_raw,
                 )
     except Exception:  # noqa: BLE001 - CLI boundary must not print secrets
         print(

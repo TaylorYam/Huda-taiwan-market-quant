@@ -371,6 +371,7 @@ def test_tradingview_kline_html_uses_visible_range_auto_scale_and_zoom():
     assert "document.addEventListener('selectstart'" in html
     assert "user-select: none" in html
     assert "caret-color: transparent" in html
+    assert "vertLine: { visible: false, labelVisible: false }" in html
     assert "pressedMouseMove: true" in html
     assert "setVisibleLogicalRange" in html
     assert "getVisibleRange" in html

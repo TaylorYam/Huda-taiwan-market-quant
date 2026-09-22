@@ -373,7 +373,7 @@ def build_tradingview_kline_html(
   <style>
     :root { color-scheme: light; }
     html, body { margin: 0; padding: 0; background: #ffffff; }
-    body { overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; user-select: none; -webkit-user-select: none; caret-color: transparent; }
     .shell { width: 100%; height: 1320px; display: flex; flex-direction: column; background: #ffffff; }
     .legend { min-height: 50px; padding: 9px 14px 4px; box-sizing: border-box; color: #1f2937; font-size: 13px; line-height: 20px; }
     .title { font-weight: 700; letter-spacing: .01em; }
@@ -385,7 +385,7 @@ def build_tradingview_kline_html(
     .range-controls { display: flex; gap: 5px; align-items: center; margin-top: 5px; overflow-x: auto; }
     .range-button { border: 1px solid #d1d5db; border-radius: 4px; background: #ffffff; color: #4b5563; padding: 3px 8px; font: inherit; font-size: 11px; cursor: pointer; }
     .range-button[aria-pressed="true"] { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; font-weight: 600; }
-    .pane { width: 100%; min-height: 0; }
+    .pane { width: 100%; min-height: 0; user-select: none; -webkit-user-select: none; caret-color: transparent; }
     #price-chart { flex: 0 0 410px; min-height: 300px; }
     .score-title { height: 26px; padding: 5px 14px 0; box-sizing: border-box; color: #4b5563; font-size: 12px; border-top: 1px solid #e5e7eb; }
     #score-chart { flex: 0 0 150px; }
@@ -479,7 +479,7 @@ def build_tradingview_kline_html(
         vertTouchDrag: false
       },
       handleScale: {
-        mouseWheel: true,
+        mouseWheel: false,
         pinch: true,
         axisPressedMouseMove: true,
         axisDoubleClickReset: true,
@@ -514,6 +514,25 @@ def build_tradingview_kline_html(
       ...interactionOptions
     });
     const priceChart = LightweightCharts.createChart(priceElement, chartOptions(false));
+    let mainChartWheelActive = false;
+    const setMainChartWheelActive = (active) => {
+      mainChartWheelActive = active;
+      priceChart.applyOptions({ handleScale: { mouseWheel: active } });
+      priceElement.dataset.wheelZoom = active ? 'enabled' : 'disabled';
+    };
+    const isPrimaryPointer = (event) => event.button === undefined || event.button === 0;
+    priceElement.addEventListener('pointerdown', (event) => {
+      if (isPrimaryPointer(event)) setMainChartWheelActive(true);
+    });
+    document.addEventListener('pointerdown', (event) => {
+      if (!priceElement.contains(event.target)) setMainChartWheelActive(false);
+    });
+    document.addEventListener('selectstart', (event) => {
+      if (event.target instanceof Element && event.target.closest('.shell')) {
+        event.preventDefault();
+      }
+    });
+    setMainChartWheelActive(false);
     const candles = priceChart.addCandlestickSeries({
       upColor: '#26a69a',
       downColor: '#ef5350',

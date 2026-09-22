@@ -69,12 +69,14 @@ def test_dashboard_history_reads_are_get_only() -> None:
         ),
         "order": "target_date.asc,created_at.asc,id.asc",
         "limit": "12",
+        "offset": "0",
     }
     observation_call = session.calls[-1]
     assert observation_call["method"] == "GET"
     assert observation_call["url"].endswith("/observations")
     assert observation_call["params"]["dataset_id"] == "eq.twse_taiex_daily_v1"
     assert observation_call["params"]["limit"] == "24"
+    assert observation_call["params"]["offset"] == "0"
     assert all(call["method"] == "GET" for call in session.calls)
 
 
@@ -90,3 +92,39 @@ def test_dashboard_history_limits_are_bounded() -> None:
                 pass
             else:
                 raise AssertionError("invalid history limit was accepted")
+
+
+class PagedResponse:
+    ok = True
+    status_code = 200
+
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        self._rows = rows
+        self.content = b"[{}]" if rows else b"[]"
+        self.text = "[]"
+
+    def json(self) -> list[dict[str, Any]]:
+        return self._rows
+
+
+def test_dashboard_history_paginates_past_postgrest_page_cap() -> None:
+    session = FakeSession()
+    first_page = [{"id": index} for index in range(1000)]
+    second_page = [{"id": 1000}]
+
+    def request(method: str, url: str, **kwargs: Any) -> PagedResponse:
+        session.calls.append({"method": method, "url": url, **kwargs})
+        offset = int(kwargs["params"].get("offset", 0))
+        return PagedResponse(first_page if offset == 0 else second_page)
+
+    session.request = request
+    with DashboardDataStore(
+        "https://example.supabase.co", "sb_secret_test", session=session
+    ) as store:
+        rows = store.get_market_score_history(limit=1001)
+
+    assert len(rows) == 1001
+    history_calls = [
+        call for call in session.calls if call["url"].endswith("/market_scores")
+    ]
+    assert [call["params"]["offset"] for call in history_calls] == ["0", "1000"]

@@ -512,7 +512,7 @@ def test_dashboard_renders_history_charts_without_recomputing(monkeypatch):
     assert len(app.tabs) == 0
     assert store.get_market_score_history.call_count == 1
     store.get_observation_history.assert_called_once_with(
-        "twse_taiex_daily_v1", limit=1000
+        "twse_taiex_daily_v1", limit=5000
     )
     assert any("data-huda-chart-iframe-style" in item.body for item in app.markdown)
 

@@ -41,6 +41,25 @@ class ScoreSession(FakeSession):
         return response
 
 
+class ExistingScoreSession(FakeSession):
+    def request(self, method: str, url: str, **kwargs: Any) -> FakeResponse:
+        self.calls.append({"method": method, "url": url, **kwargs})
+        response = FakeResponse()
+        if method == "GET" and url.endswith("/rest/v1/market_scores"):
+            response.content = (
+                b'[{"id":9,"factor_scores_json":{},"observation_identities_json":[]}]'
+            )
+            response.text = response.content.decode()
+            response.json = lambda: [
+                {
+                    "id": 9,
+                    "factor_scores_json": {},
+                    "observation_identities_json": [],
+                }
+            ]  # type: ignore[method-assign]
+        return response
+
+
 class BulkObservationSession(FakeSession):
     def request(self, method: str, url: str, **kwargs: Any) -> FakeResponse:
         self.calls.append({"method": method, "url": url, **kwargs})
@@ -166,6 +185,47 @@ def test_supabase_rest_store_writes_market_score_payload() -> None:
     assert post["json"]["calculation_hash"] == "a" * 64
 
 
+def test_supabase_rest_store_updates_missing_evidence_on_duplicate_hash() -> None:
+    session = ExistingScoreSession()
+    record = {
+        "model_version": "v0.1",
+        "target_date": "2026-09-17",
+        "as_of": None,
+        "status": "available",
+        "score": 68,
+        "direction": "偏多",
+        "reason": None,
+        "calculation_hash": "b" * 64,
+        "factor_scores_json": {
+            "tx_basis": {
+                "score": 68,
+                "status": "available",
+                "raw_value": 50,
+                "raw_values": {"basis": 50},
+            }
+        },
+        "observation_identities_json": [{"dataset_id": "taifex_tx_daily_contract_v1"}],
+    }
+
+    with SupabaseRestObservationStore(
+        "https://example.supabase.co",
+        "sb_secret_test",
+        session=session,
+    ) as store:
+        result = store.write_market_score(record)
+
+    assert result.score_id == 9
+    assert result.action == "updated"
+    patch = session.calls[-1]
+    assert patch["method"] == "PATCH"
+    assert patch["params"] == {"id": "eq.9"}
+    assert patch["json"]["factor_scores_json"] == record["factor_scores_json"]
+    assert (
+        patch["json"]["observation_identities_json"]
+        == record["observation_identities_json"]
+    )
+
+
 def test_supabase_rest_lists_market_score_identities_in_a_date_range() -> None:
     session = FakeSession()
 
@@ -193,6 +253,28 @@ def test_supabase_rest_lists_market_score_identities_in_a_date_range() -> None:
         "model_version": "eq.v0.1",
         "target_date": ["gte.2026-01-01", "lte.2026-01-31"],
     }
+
+
+def test_supabase_rest_can_include_factor_evidence_for_backfill() -> None:
+    session = FakeSession()
+
+    with SupabaseRestObservationStore(
+        "https://example.supabase.co",
+        "sb_secret_test",
+        session=session,
+    ) as store:
+        store.list_market_scores(
+            model_version="v0.1",
+            start_date="2026-01-01",
+            end_date="2026-01-31",
+            include_factor_scores=True,
+        )
+
+    request = session.calls[-1]
+    assert request["params"]["select"] == (
+        "id,model_version,target_date,status,calculation_hash,"
+        "factor_scores_json,observation_identities_json"
+    )
 
 
 def _backtest_row(row_id: int, observation_date: str) -> dict[str, Any]:

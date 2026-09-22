@@ -21,6 +21,11 @@ on:
         required: true
         default: false
         type: boolean
+      refresh_missing_raw:
+        description: Update available dates whose factors lack raw evidence
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -54,5 +59,8 @@ jobs:
           fi
           if [[ "${{ inputs.refresh_unavailable }}" == "true" ]]; then
             args+=(--refresh-unavailable)
+          fi
+          if [[ "${{ inputs.refresh_missing_raw }}" == "true" ]]; then
+            args+=(--refresh-missing-raw)
           fi
           python -m scripts.backfill_market_scores "${args[@]}"

@@ -4,7 +4,12 @@ from datetime import date
 
 from test_daily_score_pipeline import _source_observations
 
-from src.factors.contracts import BASIS_FACTOR_ID
+from src.factors.contracts import (
+    BASIS_FACTOR_ID,
+    MOMENTUM_FACTOR_ID,
+    PCR_FACTOR_ID,
+    VIX_FACTOR_ID,
+)
 from src.scoring import MarketScoreRecord, calculate_daily_score
 
 
@@ -73,3 +78,32 @@ def test_market_score_record_retains_raw_factor_evidence_for_display() -> None:
     }
     assert factor["window_start"] == "2026-09-17"
     assert factor["window_end"] == "2026-09-17"
+
+
+def test_market_score_record_retains_raw_evidence_for_each_available_factor() -> None:
+    taiex, pcr, tx, vix = _source_observations(date(2026, 9, 17))
+    result = calculate_daily_score(
+        taiex_observations=taiex,
+        pcr_observations=pcr,
+        tx_observations=tx,
+        vix_observations=vix,
+        target_date="2026-09-17",
+        historical_values={
+            MOMENTUM_FACTOR_ID: [0.0, 0.01, 0.02],
+            BASIS_FACTOR_ID: [-100, 0, 100],
+            PCR_FACTOR_ID: [0.8, 1.0, 1.2],
+            VIX_FACTOR_ID: [15, 20, 30],
+        },
+    )
+
+    record = MarketScoreRecord.from_result(result)
+    available = {
+        factor_id: factor
+        for factor_id, factor in record.factor_scores.items()
+        if factor["status"] == "available"
+    }
+    assert available
+    assert all(
+        factor["raw_values"] or factor["raw_value"] is not None
+        for factor in available.values()
+    )

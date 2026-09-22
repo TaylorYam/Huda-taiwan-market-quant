@@ -1,7 +1,8 @@
 # Market Score 歷史回補 v0.1
 
 `scripts/backfill_market_scores.py` 會把已保存的日資料逐日重播成
-Market Score，讓 dashboard 的 Market Score 與各因子趨勢圖有歷史曲線。
+Market Score，讓 dashboard 的 Market Score 與各因子趨勢圖有歷史曲線。預設會保留
+既有結果；原始值遺漏時可用 `refresh_missing_raw` 做證據補齊。
 
 ## 回補規則
 
@@ -14,6 +15,9 @@ Market Score，讓 dashboard 的 Market Score 與各因子趨勢圖有歷史曲�
 - 預設是 dry run；只有 workflow 的 `write=true` 才會寫入 Supabase。
 - `refresh_unavailable=true` 會保留既有的 available 結果，只重新計算既有的
   unavailable 日期；回放摘要會列出缺少的因子與最多 10 筆日期診斷。
+- `refresh_missing_raw=true` 會檢查既有 available 日期的八個因子是否都有
+  `raw_value` 或 `raw_values`。只有缺少原始證據的日期會重播並更新既有列，
+  不會新增相同 calculation hash 的重複列；第二次執行已完整的日期會跳過。
 
 ## 執行方式
 
@@ -23,10 +27,12 @@ GitHub Actions → **Market Score range backfill** → Run workflow，輸入例�
 start_date: 2023-09-18
 end_date: 2026-09-17
 write: false
+refresh_missing_raw: true
 ```
 
 先看 dry run 的 `available_days`、`unavailable_days` 與 `reason_counts`。確認範圍
-後再以相同日期執行 `write: true`。目前 dashboard 最多讀取 1000 筆，足以涵蓋本次
+後再以相同日期執行 `write: true`。原始值回補會在摘要的 `updated` 顯示更新列數。
+目前 dashboard 最多讀取 1000 筆，足以涵蓋本次
 725 個交易日的資料窗口。2026-09-21 的展示回放寫入 724 個可用日期；2023-09-25
 因官方法人 OI rolling window 沒有更早資料，保留為 unavailable，不用虛構前值。
 

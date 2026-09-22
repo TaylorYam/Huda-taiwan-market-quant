@@ -198,6 +198,7 @@ class SupabaseRestObservationStore:
         start_date: str | None = None,
         end_date: str | None = None,
         limit: int = 5000,
+        include_factor_scores: bool = False,
     ) -> list[dict[str, Any]]:
         """List persisted score identities for an idempotent history replay.
 
@@ -205,6 +206,8 @@ class SupabaseRestObservationStore:
         existing result for a target date.  In particular, a historical
         replay must never create a second row that hides a live score in the
         dashboard just because the replay has a different calculation hash.
+        ``include_factor_scores`` adds the persisted evidence payload for the
+        opt-in raw-evidence repair pass.
         """
 
         if not 1 <= limit <= 10_000:
@@ -215,8 +218,11 @@ class SupabaseRestObservationStore:
             date.fromisoformat(end_date)
         if start_date is not None and end_date is not None and start_date > end_date:
             raise ValueError("start_date must not be after end_date")
+        select = "id,model_version,target_date,status,calculation_hash"
+        if include_factor_scores:
+            select += ",factor_scores_json,observation_identities_json"
         params: dict[str, Any] = {
-            "select": "id,model_version,target_date,status,calculation_hash",
+            "select": select,
             "order": "target_date.asc,id.asc",
             "limit": str(limit),
         }
@@ -232,7 +238,7 @@ class SupabaseRestObservationStore:
         return self._request("GET", "/market_scores", params=params)
 
     def write_market_score(self, record: Mapping[str, Any]) -> MarketScoreWriteResult:
-        """Insert one derived result or return duplicate for the same hash."""
+        """Insert one result, or enrich a same-hash row missing evidence."""
 
         required = {
             "model_version",
@@ -251,12 +257,31 @@ class SupabaseRestObservationStore:
             "model_version": f"eq.{record['model_version']}",
             "target_date": f"eq.{record['target_date']}",
             "calculation_hash": f"eq.{record['calculation_hash']}",
-            "select": "id",
+            "select": "id,factor_scores_json,observation_identities_json",
             "limit": "1",
         }
         existing = self._request("GET", "/market_scores", params=identity_params)
         if existing:
-            return MarketScoreWriteResult(int(existing[0]["id"]), "duplicate")
+            existing_row = existing[0]
+            if (
+                existing_row.get("factor_scores_json") != record["factor_scores_json"]
+                or existing_row.get("observation_identities_json")
+                != record["observation_identities_json"]
+            ):
+                self._request(
+                    "PATCH",
+                    "/market_scores",
+                    params={"id": f"eq.{existing_row['id']}"},
+                    json_body={
+                        "factor_scores_json": record["factor_scores_json"],
+                        "observation_identities_json": record[
+                            "observation_identities_json"
+                        ],
+                    },
+                    prefer="return=minimal",
+                )
+                return MarketScoreWriteResult(int(existing_row["id"]), "updated")
+            return MarketScoreWriteResult(int(existing_row["id"]), "duplicate")
 
         payload = {
             "model_version": record["model_version"],

@@ -5,9 +5,12 @@ from dataclasses import dataclass
 from scripts.backfill_market_scores import (
     existing_available_target_dates,
     existing_target_dates,
+    existing_target_dates_for_refresh,
     group_observations,
+    has_complete_raw_evidence,
     summarize_results,
 )
+from src.scoring.contracts import REQUIRED_FACTOR_IDS
 from src.scoring.pipeline import calculate_daily_score
 
 
@@ -58,6 +61,45 @@ def test_existing_available_target_dates_ignore_unavailable_rows() -> None:
             {},
         ]
     ) == {"2026-01-03"}
+
+
+def test_raw_evidence_refresh_only_selects_available_incomplete_rows() -> None:
+    complete = {
+        factor_id: {
+            "status": "available",
+            "raw_value": 1,
+            "raw_values": {"value": 1},
+        }
+        for factor_id in REQUIRED_FACTOR_IDS
+    }
+    rows = [
+        {
+            "target_date": "2026-01-02",
+            "status": "available",
+            "factor_scores_json": complete,
+        },
+        {
+            "target_date": "2026-01-03",
+            "status": "available",
+            "factor_scores_json": {
+                REQUIRED_FACTOR_IDS[0]: complete[REQUIRED_FACTOR_IDS[0]]
+            },
+        },
+        {"target_date": "2026-01-04", "status": "unavailable"},
+    ]
+
+    assert has_complete_raw_evidence(rows[0])
+    assert not has_complete_raw_evidence(rows[1])
+    assert existing_target_dates_for_refresh(
+        rows,
+        refresh_unavailable=False,
+        refresh_missing_raw=True,
+    ) == {"2026-01-02", "2026-01-04"}
+    assert existing_target_dates_for_refresh(
+        rows,
+        refresh_unavailable=True,
+        refresh_missing_raw=True,
+    ) == {"2026-01-02"}
 
 
 def test_summary_does_not_turn_unavailable_into_zero() -> None:

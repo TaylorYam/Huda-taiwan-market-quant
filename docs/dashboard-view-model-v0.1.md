@@ -25,3 +25,7 @@ read-only `DashboardDataStore` adapter:
 - Factor trend lines come from the persisted `factor_scores_json` envelope.
   Each factor cell is missing unless its own status is `available` and its
   score is valid; the dashboard does not recalculate factors in the renderer.
+- New score records retain the factor's raw input value, named raw values, and
+  calculation window in that same JSON envelope. The dashboard labels the
+  normalized result as `分數（0–100）` and shows the raw evidence with its unit;
+  legacy records without those fields say `原始值尚未儲存` instead of guessing.

@@ -14,3 +14,5 @@ This repository describes a Taiwan market scoring system built from dated offici
 - **Forward-filled display**: A chart-only continuation of the last available score across a missing date, marked with a dashed segment and `前值遞補`; it never changes the persisted score.
 - **Data-quality warning**: The warning icon and tooltip shown when a Market Score is unavailable or a factor has an explicit quality issue.
 - **Factor explanation**: The four public fields shown below the selected factor chart: purpose, data window, calculation logic, and score direction.
+- **Normalized factor score**: A factor result on the 0–100 display scale after a historical-distribution comparison or explicit model rule; it is not the source unit.
+- **Raw factor evidence**: The persisted input value, named input values, and calculation window retained beside a normalized factor score so the dashboard can explain its unit without recalculating.

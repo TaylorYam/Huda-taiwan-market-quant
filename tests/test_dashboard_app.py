@@ -11,7 +11,9 @@ from src.dashboard.app import (
     build_tradingview_kline_html,
     display_score,
     factor_history_frame,
+    factor_raw_display,
     factor_rows,
+    factor_table_markup,
     previous_score_delta,
     score_history_frame,
     taiex_ohlc_frame,
@@ -171,6 +173,47 @@ def test_absent_factors_are_explicitly_unavailable():
     rows = factor_rows({"factor_scores_json": {}})
     assert len(rows) == 8
     assert all(row["分數"] == "unavailable" for row in rows)
+
+
+def test_factor_score_display_separates_normalized_score_from_raw_value():
+    rows = factor_rows(
+        {
+            "factor_scores_json": {
+                "foreign_tx_net_position": {
+                    "status": "available",
+                    "score": 8.7,
+                    "raw_value": 8700,
+                    "raw_values": {"open_interest_net": 8700},
+                }
+            }
+        }
+    )
+    row = next(row for row in rows if row["因子"] == "外資台指期淨部位")
+    assert row["分數"] == "8.7 / 100"
+    assert row["原始值"] == "+8,700.0 口"
+    markup = factor_table_markup(
+        {
+            "factor_scores_json": {
+                "foreign_tx_net_position": {
+                    "status": "available",
+                    "score": 8.7,
+                    "raw_value": 8700,
+                    "raw_values": {"open_interest_net": 8700},
+                }
+            }
+        }
+    )
+    assert "分數（0–100）" in markup
+    assert "歷史分布" in markup
+
+
+def test_legacy_factor_record_does_not_invent_raw_value():
+    assert (
+        factor_raw_display(
+            "foreign_tx_net_position", {"status": "available", "score": 8.7}
+        )
+        == "原始值尚未儲存"
+    )
 
 
 def test_malformed_factor_payload_is_visible_as_unavailable():
@@ -406,6 +449,9 @@ def test_tradingview_kline_html_links_selected_factor_pane():
     assert "renderFactorExplanation" in html
     assert "前值遞補" in html
     assert "rangeOptions" in html
+    assert "score-notice" in html
+    assert "factorCurrent" in html
+    assert "分數（0–100）" in html
 
 
 def test_dashboard_renders_history_charts_without_recomputing(monkeypatch):

@@ -198,6 +198,16 @@ jobs:
             echo "- result: completed"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Refresh scheduled score cutoff after collection
+        if: ${{ github.event_name == 'schedule' }}
+        shell: bash
+        run: |
+          # Source rows are ingested during this job. The score boundary must
+          # include those rows while manual runs retain their explicit as-of.
+          AS_OF_TAIPEI="$(TZ=Asia/Taipei date --iso-8601=seconds)"
+          echo "AS_OF_TAIPEI=$AS_OF_TAIPEI" >> "$GITHUB_ENV"
+          echo "Scheduled score cutoff refreshed after source collection: $AS_OF_TAIPEI"
+
       - name: Calculate and persist Market Score
         shell: bash
         run: |

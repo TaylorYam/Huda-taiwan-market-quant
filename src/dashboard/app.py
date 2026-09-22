@@ -42,7 +42,9 @@ SOURCE_ATTRIBUTION = (
 )
 
 TAIEX_DATASET_ID = "twse_taiex_daily_v1"
-CHART_LIMIT = 1000
+# Supabase caps one REST response at 1,000 rows.  DashboardDataStore pages
+# history reads so duplicate score revisions cannot hide recent dates.
+CHART_LIMIT = 5000
 
 WARNING_ICON_SVG = """
 <svg class="warning-icon" width="18" height="18" viewBox="0 0 24 24" role="img" aria-label="資料品質警示" style="vertical-align:-4px;color:#b45309">

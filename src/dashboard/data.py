@@ -9,6 +9,8 @@ from src.data.supabase_rest import SupabaseRestObservationStore
 class DashboardDataStore(SupabaseRestObservationStore):
     """Reuse the server transport; dashboard call sites issue GET requests only."""
 
+    _POSTGREST_PAGE_SIZE = 1000
+
     @staticmethod
     def _validate_limit(limit: int) -> int:
         if (
@@ -40,17 +42,16 @@ class DashboardDataStore(SupabaseRestObservationStore):
         """Read persisted score history without recalculating or filling gaps."""
 
         self._validate_limit(limit)
-        return self._request(
-            "GET",
+        return self._read_history_pages(
             "/market_scores",
-            params={
+            {
                 "select": (
                     "id,target_date,as_of,status,score,direction,reason,"
                     "factor_scores_json,created_at"
                 ),
                 "order": "target_date.asc,created_at.asc,id.asc",
-                "limit": str(limit),
             },
+            limit,
         )
 
     def get_observation_history(
@@ -61,19 +62,53 @@ class DashboardDataStore(SupabaseRestObservationStore):
         self._validate_limit(limit)
         if re.fullmatch(r"[A-Za-z0-9_.-]+", dataset_id) is None:
             raise ValueError("dataset_id contains an invalid identifier")
-        return self._request(
-            "GET",
+        return self._read_history_pages(
             "/observations",
-            params={
+            {
                 "select": (
                     "id,dataset_id,observation_date,source_record_key,"
                     "values_json,quality_status,source_payload_hash,created_at"
                 ),
                 "dataset_id": f"eq.{dataset_id}",
                 "order": "observation_date.asc,created_at.asc,id.asc",
-                "limit": str(limit),
             },
+            limit,
         )
+
+    def _read_history_pages(
+        self,
+        path: str,
+        params: dict[str, Any],
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        """Read history past Supabase's default 1,000-row response cap.
+
+        History rows are ordered oldest first so the dashboard's existing
+        same-date revision selection keeps the newest persisted revision. The
+        explicit offset pages prevent duplicate score revisions from consuming
+        the one-page limit and hiding the most recent dates.
+        """
+
+        rows: list[dict[str, Any]] = []
+        offset = 0
+        while len(rows) < limit:
+            page_limit = min(self._POSTGREST_PAGE_SIZE, limit - len(rows))
+            page = self._request(
+                "GET",
+                path,
+                params={
+                    **params,
+                    "limit": str(page_limit),
+                    "offset": str(offset),
+                },
+            )
+            if not isinstance(page, list):
+                raise TypeError("Supabase history response must be a list")
+            rows.extend(row for row in page if isinstance(row, dict))
+            if len(page) < page_limit:
+                break
+            offset += len(page)
+        return rows[:limit]
 
     def get_latest_source_quality(self, dataset_id: str) -> dict[str, Any] | None:
         """Read the most recently retrieved record for one source dataset.

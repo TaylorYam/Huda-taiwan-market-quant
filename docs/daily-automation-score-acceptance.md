@@ -24,9 +24,14 @@ evidence, revisions, duplicate replay, and GET-only dashboard reads.
 
 ## Operational gate outside this code boundary
 
-The workflow now has weekday 16:30 and 22:00 Asia/Taipei scheduled passes with
-the same one-writer concurrency policy as manual runs. The later pass confirms
-late or revised source data. The application contract and a live secret/table
+The workflow has weekday 16:30 and 22:00 Asia/Taipei scheduled passes, plus a
+00:30 Asia/Taipei Tuesday-Saturday confirmation pass. Each midnight weekday has
+its own cron so the originating local weekday remains identifiable if execution
+is delayed into the next scheduled day. The pass resolves the previous TWSE
+trading date from the official holiday calendar and stops before collection if
+that calendar cannot be validated. All passes retain the same one-writer
+concurrency policy and strict source-date guards.
+The application contract and a live secret/table
 smoke check are proven, while backup/restore, access separation, secret rotation,
 quota, and source-term evidence remain release gates in Issue #18.
 

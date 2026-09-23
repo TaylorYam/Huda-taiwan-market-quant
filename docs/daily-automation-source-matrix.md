@@ -2,19 +2,22 @@
 
 盤點日期：2026-09-21。本文只盤點目前 workflow 與 `scripts/collect_*.py`，不改變
 來源 parser 或 scoring 行為。每日排程集中在
-`daily-market-automation.yml`，使用 16:30 與 22:00 Asia/Taipei（分別為
-`30 8` 與 `0 14` UTC）；各來源 workflow 保留手動入口，不再各自排程。
+`daily-market-automation.yml`，使用 16:30 與 22:00 Asia/Taipei，以及隔日
+00:30（16:30、22:00 使用 `30 8` 與 `0 14` UTC 週一至週五；00:30 使用
+`30 16 * * 1` 至 `30 16 * * 5` 五個 UTC cron 對應台北週二至週六）；
+午夜班次按官方 TWSE 開休市日曆回推前一交易日，日曆無法驗證時安全停止；
+各來源 workflow 保留手動入口，不再各自排程。
 
 ## 目前入口
 
 | 資料 | dataset / 官方入口 | 目前 workflow 與排程 | 手動參數與預設 | 交易日風險 | 重複／修訂風險 |
 |---|---|---|---|---|---|
 | TAIEX | `twse_taiex_daily_v1`；TWSE `MI_5MINS_HIST` 月查詢 | `.github/workflows/taiex-daily-ingestion.yml`；手動入口。每日排程由 `daily-market-automation.yml` 統一執行 | `year`、`month` 必須成對；省略時抓 Asia/Taipei 當月。`collect_taiex_month.py --dry-run` 可只驗證 | 月查詢通常會回傳當月已發布列；月初若尚無資料，parser 會失敗；資料發布延遲則會抓到不完整月份 | 每日重抓整個當月，已寫列會造成 retrieval count 增加；同一 payload 去重，修訂追加 revision |
-| 外資現貨現金 | `twse_foreign_cash_bfi82u_v1`；TWSE BFI82U 日報 | `.github/workflows/twse-free-factor-daily-ingestion.yml`；手動入口。每日排程由整合流程執行 | `date` 可指定 `YYYY-MM-DD`；省略取當日 Asia/Taipei。回補 workflow 仍使用 `start`、`end`、`write` | 週末／台灣假日沒有日列；BFI82U 有發布版本／時間差，整合流程的 16:30／22:00 會分兩次確認 | 日列 label 為 `day:YYYY-MM-DD`，相同 payload 可去重；單一整合流程避免獨立排程競爭 |
+| 外資現貨現金 | `twse_foreign_cash_bfi82u_v1`；TWSE BFI82U 日報 | `.github/workflows/twse-free-factor-daily-ingestion.yml`；手動入口。每日排程由整合流程執行 | `date` 可指定 `YYYY-MM-DD`；省略取當日 Asia/Taipei。回補 workflow 仍使用 `start`、`end`、`write` | 週末／台灣假日沒有日列；午夜確認以前一個 TWSE 交易日為目標並以來源日期守門 | 日列 label 為 `day:YYYY-MM-DD`，相同 payload 可去重；單一整合流程避免獨立排程競爭 |
 | TWSE 市場成交金額 | `twse_market_turnover_fmtqik_v1`；TWSE FMTQIK 月報 | `.github/workflows/twse-free-factor-daily-ingestion.yml`；手動入口。每日排程由整合流程執行 | `year`／`month` 可指定月份；若只指定 `date`，workflow 會取該日期月份；回補 workflow 仍使用 `start`、`end`、`write` | 月初空報表、假日執行與報表發布延遲都可能使單次任務失敗或只得到不完整月份 | 每日重抓當月仍會增加 retrieval count；單一整合流程避免與獨立排程重複寫入 |
 | TAIFEX TX | `taifex_tx_daily_contract_v1`；TAIFEX 日期查詢頁（年度 ZIP 僅作已結束年度回補） | `.github/workflows/taifex-tx-daily-ingestion.yml`；手動入口。每日排程由整合流程執行 | `date`；省略時抓 Asia/Taipei 當日。`collect_taifex_tx_day.py --dry-run` 可只驗證；年度 ZIP 另由 `collect_taifex_tx.py` 與 archive audit 使用 | 日期查詢遇到台灣假日或資料尚未發布時會回傳空列／失敗，不能把前一日冒充為今日 | 日級 label 為 `daily:YYYY-MM-DD:一般`；年度 ZIP 的 `year:YYYY` label 保留給歷史回補，不在每日工作流混用 |
 | 外資台指期 OI | `taifex_institutional_futures_oi_v1`；TAIFEX OpenAPI latest snapshot | `.github/workflows/taifex-institutional-daily-ingestion.yml` **只有手動 dispatch**，沒有 schedule。`write` 必填但預設 `false` | `write=true` 時必須同時提供 `expected_date`；讀取驗證可省略日期。workflow 會把 `--expected-date` 傳給 collector；另有 `taifex-range-backfill.yml` 的 `start`、`end`、`write` | 假日或發布延遲仍可能回傳上一交易日，但 guarded write 會在日期不符時於寫入前失敗，不保存 stale snapshot。OpenAPI 是最新快照，不是日期查詢 | latest collector label 為 `latest`；rolling-range backfill label 為 `day:YYYY-MM-DD`。兩條入口仍可能形成不同 logical rows，需避免同時執行 |
-| TXO PCR／OI PCR | `taifex_txo_oi_pcr_v1`；TAIFEX PCR 日期表單 | `.github/workflows/taifex-pcr-daily-ingestion.yml`；手動入口。每日排程由整合流程執行 | `date`；省略時取當日 Asia/Taipei。`collect_taifex_pcr.py --dry-run` 可只驗證 | 台灣假日（即使是平日）沒有該日期資料，parser 會失敗；整合流程會在 16:30／22:00 依序重試 | label 為 `day:YYYY-MM-DD`；相同 payload 去重，內容修訂追加 revision |
+| TXO PCR／OI PCR | `taifex_txo_oi_pcr_v1`；TAIFEX PCR 日期表單 | `.github/workflows/taifex-pcr-daily-ingestion.yml`；手動入口。每日排程由整合流程執行 | `date`；省略時取當日 Asia/Taipei。`collect_taifex_pcr.py --dry-run` 可只驗證 | 午夜班次先以 TWSE 官方日曆選出前一交易日；來源仍須回傳該日資料 | label 為 `day:YYYY-MM-DD`；相同 payload 去重，內容修訂追加 revision |
 | Taiwan VIX | `taifex_taiwan_vix_close_v1`；TAIFEX `log2data/YYYYMMnew.txt` 月檔 | `.github/workflows/taifex-vix-daily-ingestion.yml`；手動入口。每日排程由整合流程執行 | `year`、`month` 必須成對；省略時抓 Asia/Taipei 當月。`collect_taifex_vix_month.py --dry-run` 可只驗證 | 月檔會包含當月已發布交易日；假日仍會重抓。月初沒有列時 parser 可能失敗；VIX 的 rolling-range 回補是另一個手動入口 | 月 collector label 為 `month:YYYY-MM`；整合流程統一每日寫入入口，避免和日級回補形成排程競爭 |
 
 另外，`daily-market-score.yml` 保留手動入口，要求 `target_date` 與 `as_of`，作為人工重算／診斷用途；正式每日排程由 `daily-market-automation.yml` 在七個來源完成後直接執行評分。

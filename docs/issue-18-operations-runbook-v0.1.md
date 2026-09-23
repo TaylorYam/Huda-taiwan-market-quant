@@ -133,7 +133,7 @@ Supabase Free 不提供可依賴的 managed automatic backup 或 PITR，因此�
 
 現有來源研究已指出，TWSE E-Shop 資料有自動化與使用條款限制，TAIFEX 歷史資料商品也有各自的申購與使用邊界；這些文件中的公開資料探測結果不等於取得付費資料授權。參考 [`data-availability-probe-v0.1.md`](data-availability-probe-v0.1.md) 與 [`phase0-taifex-history-v0.1.md`](phase0-taifex-history-v0.1.md)。
 
-目前新增的 [`taifex-institutional-daily-ingestion.yml`](../.github/workflows/taifex-institutional-daily-ingestion.yml) 只有 `workflow_dispatch`，預設為唯讀探測；只有操作者明確勾選寫入、提供 `expected_date` 並通過 secret 檢查時才會寫入 Supabase。workflow 會在 collector 寫入前檢查官方 snapshot 的 observation date，避免假日或延遲資料被保存成錯誤日期。完整的 [`daily-market-automation.yml`](../.github/workflows/daily-market-automation.yml) 已加入平日 16:30 與 22:00 Asia/Taipei 排程，會依排程計畫時間解析目標交易日；若 GitHub 延遲到隔日才啟動，仍維持原交易日。來源收集完成後才刷新 scheduled score cutoff，讓同一批剛寫入的資料能進入評分；22:00 是延遲／修訂資料的確認重跑，institutional collector 仍由完整流程的日期閘門保護。這不代表 Issue #18 的備份、還原、權限、輪替、配額與來源條款 gates 已完成。
+目前新增的 [`taifex-institutional-daily-ingestion.yml`](../.github/workflows/taifex-institutional-daily-ingestion.yml) 只有 `workflow_dispatch`，預設為唯讀探測；只有操作者明確勾選寫入、提供 `expected_date` 並通過 secret 檢查時才會寫入 Supabase。workflow 會在 collector 寫入前檢查官方 snapshot 的 observation date，避免假日或延遲資料被保存成錯誤日期。完整的 [`daily-market-automation.yml`](../.github/workflows/daily-market-automation.yml) 現有台北時間 16:30、22:00，以及週二至週六 00:30 排程；午夜班次以 TWSE 官方開休市日曆解析前一交易日，並以星期別 cron 保留原排程日，避免跨日延遲後錯認目標。官方日曆無法讀取或驗證時，會在任何來源寫入前安全停止。來源收集完成後才刷新 scheduled score cutoff，讓同一批剛寫入的資料能進入評分；22:00 與 00:30 是延遲／修訂資料的確認重跑，institutional collector 仍由完整流程的日期閘門保護。這不代表 Issue #18 的備份、還原、權限、輪替、配額與來源條款 gates 已完成。
 
 ## Release decision record
 

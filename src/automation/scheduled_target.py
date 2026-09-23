@@ -12,7 +12,10 @@ TAIPEI = ZoneInfo("Asia/Taipei")
 SCHEDULE_LOCAL_TIMES = {
     "30 8 * * 1-5": time(16, 30),
     "0 14 * * 1-5": time(22, 0),
+    # 16:30 UTC Monday-Friday is 00:30 Asia/Taipei Tuesday-Saturday.
+    "30 16 * * 1-5": time(0, 30),
 }
+PREVIOUS_LOCAL_DATE_SCHEDULES = {"30 16 * * 1-5"}
 
 
 def resolve_scheduled_target_date(*, now: datetime, schedule: str) -> date:
@@ -30,6 +33,17 @@ def resolve_scheduled_target_date(*, now: datetime, schedule: str) -> date:
         raise ValueError(f"unsupported scheduled cron: {schedule!r}") from exc
 
     local_now = now.astimezone(TAIPEI)
+    if schedule in PREVIOUS_LOCAL_DATE_SCHEDULES:
+        # This confirmation cron runs after the Taiwan calendar date rolls
+        # over. Use the latest scheduled local occurrence, then target its
+        # preceding date. A late start before the next 00:30 occurrence remains
+        # attached to the prior run. In weekends or exchange holidays,
+        # source-date guards stop the run rather than relabeling older data.
+        target = local_now.date() - timedelta(days=1)
+        if local_now.timetz().replace(tzinfo=None) < scheduled_time:
+            target -= timedelta(days=1)
+        return target
+
     target = local_now.date()
     if local_now.timetz().replace(tzinfo=None) < scheduled_time:
         target -= timedelta(days=1)

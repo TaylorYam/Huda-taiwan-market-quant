@@ -23,6 +23,9 @@ on:
     - cron: "30 8 * * 1-5"
     # Confirmation pass for delayed or revised official data.
     - cron: "0 14 * * 1-5"
+    # 00:30 Asia/Taipei Tuesday-Saturday, confirming the previous local date.
+    # Run at :30 rather than the hour boundary to reduce schedule contention.
+    - cron: "30 16 * * 1-5"
 
 permissions:
   contents: read
@@ -111,6 +114,18 @@ jobs:
           print(f"Validated target_date={target.isoformat()} as_of={canonical_as_of}")
           PY
 
+          if [[ "${GITHUB_EVENT_NAME:-}" == "schedule" ]]; then
+            {
+              echo "## Scheduled input"
+              echo ""
+              echo "- cron (UTC): \`$SCHEDULE_CRON\`"
+              echo "- target_date (Asia/Taipei): \`$REQUESTED_TARGET_DATE\`"
+              if [[ "$SCHEDULE_CRON" == "30 16 * * 1-5" ]]; then
+                echo "- pass: 00:30 Taipei confirmation of the preceding local date"
+              fi
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       # Source steps are deliberately separate and sequential. A failed
       # collector stops the job, so the score step cannot run on partial input.
       - name: Collect TAIEX month
@@ -189,7 +204,22 @@ jobs:
         shell: bash
         run: |
           echo "TAIFEX institutional futures latest snapshot (target_date=$TARGET_DATE)" > "$RUNNER_TEMP/daily-market-automation-stage.txt"
-          python -m scripts.collect_taifex_institutional --write --expected-date "$TARGET_DATE"
+          collector_log="$RUNNER_TEMP/taifex-institutional-collector.log"
+          if ! python -m scripts.collect_taifex_institutional --write --expected-date "$TARGET_DATE" 2>&1 | tee "$collector_log"; then
+            mismatch="$(grep -F "official institutional futures observation_date mismatch:" "$collector_log" | tail -n 1 || true)"
+            {
+              echo "### Source: TAIFEX institutional futures latest snapshot"
+              echo "- target_date requested: \`$TARGET_DATE\`"
+              echo "- result: collector failed before scoring; no Market Score was calculated by this run"
+              if [[ -n "$mismatch" ]]; then
+                echo "- date validation: \`$mismatch\`"
+                echo "- write safety: the mismatched snapshot was rejected before persistence"
+              else
+                echo "- date validation: collector did not return a valid snapshot for the requested date; inspect the failed step output for the source error"
+              fi
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
           {
             echo "### Source: TAIFEX institutional futures latest snapshot"
             echo "- target_date requested: \`$TARGET_DATE\`"
@@ -248,5 +278,23 @@ jobs:
             echo "- as_of (requested): \`${REQUESTED_AS_OF:-unavailable}\`"
             echo "- failed or interrupted stage: \`$failed_stage\`"
             echo "- source collection and scoring run sequentially; later steps were skipped after the first failure"
+            if [[ "$failed_stage" == "Market Score ("* ]]; then
+              echo "- Market Score: scoring started but failed; inspect that step to confirm persistence status"
+            else
+              echo "- Market Score: not run because input validation or an earlier required source failed"
+            fi
+            if [[ "${GITHUB_EVENT_NAME:-}" == "schedule" ]]; then
+              echo "- date safety: a non-trading date or unpublished/mismatched source is not reassigned to another date"
+            fi
+            if [[ "$failed_stage" == *"(target_date="* ]]; then
+              echo "- source/date result: the named collector did not complete for this target_date; previous-day data is never substituted"
+              echo "- check the failed source step for the cause, such as a non-trading date, delayed publication, or source error"
+            fi
+            case "$failed_stage" in
+              "TAIFEX institutional futures latest snapshot ("*)
+                echo "- institutional snapshot gate: only the official snapshot matching target_date can be saved; a stale or not-yet-published snapshot is rejected before write"
+                echo "- inspect the failed collector step for the expected and observed dates; a Taiwan holiday also has no valid daily snapshot"
+                ;;
+            esac
             echo "- inspect the failed step above; rerun manually with the same inputs only after the source or configuration issue is addressed"
           } >> "$GITHUB_STEP_SUMMARY"

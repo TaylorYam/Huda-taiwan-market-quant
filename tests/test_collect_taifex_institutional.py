@@ -4,6 +4,8 @@ import gzip
 import json
 from typing import Self
 
+import pytest
+
 from scripts import collect_taifex_institutional as collector
 from src.data.taifex_institutional import (
     fetch_institutional_futures_latest,
@@ -93,8 +95,20 @@ class FakeStore:
         return type("Result", (), {"action": "inserted", "observation_id": 1})()
 
 
-def test_expected_date_rejects_before_write(monkeypatch, capsys) -> None:
-    [observation] = parse_institutional_futures_payload(payload())
+@pytest.mark.parametrize(
+    ("expected_date", "snapshot_date"),
+    [
+        ("2026-09-17", "20260916"),
+        # If the requested Monday is a market holiday or the report is late,
+        # Friday's snapshot must not be relabeled as Monday's observation.
+        ("2026-09-21", "20260918"),
+    ],
+    ids=["stale-daily-snapshot", "previous-session-after-weekend-or-holiday"],
+)
+def test_expected_date_rejects_before_write(
+    monkeypatch, capsys, expected_date: str, snapshot_date: str
+) -> None:
+    [observation] = parse_institutional_futures_payload(payload(snapshot_date))
     store = FakeStore()
 
     monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
@@ -106,9 +120,11 @@ def test_expected_date_rejects_before_write(monkeypatch, capsys) -> None:
 
     monkeypatch.setattr(collector, "collect_institutional_futures_latest", fake_collect)
 
-    assert collector.main(["--write", "--expected-date", "2026-09-17"]) == 1
+    assert collector.main(["--write", "--expected-date", expected_date]) == 1
     assert store.writes == []
-    assert "observation_date mismatch" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "observation_date mismatch" in output
+    assert f"expected {expected_date}, got {observation.observation_date}" in output
 
 
 def test_without_expected_date_keeps_write_path(monkeypatch, capsys) -> None:

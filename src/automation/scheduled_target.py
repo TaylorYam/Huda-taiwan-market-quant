@@ -16,6 +16,7 @@ SCHEDULE_LOCAL_TIMES = {
     "30 16 * * 1-5": time(0, 30),
 }
 PREVIOUS_LOCAL_DATE_SCHEDULES = {"30 16 * * 1-5"}
+MIDNIGHT_CONFIRMATION_LOCAL_WEEKDAYS = frozenset({1, 2, 3, 4, 5})
 
 
 def resolve_scheduled_target_date(*, now: datetime, schedule: str) -> date:
@@ -34,15 +35,17 @@ def resolve_scheduled_target_date(*, now: datetime, schedule: str) -> date:
 
     local_now = now.astimezone(TAIPEI)
     if schedule in PREVIOUS_LOCAL_DATE_SCHEDULES:
-        # This confirmation cron runs after the Taiwan calendar date rolls
-        # over. Use the latest scheduled local occurrence, then target its
-        # preceding date. A late start before the next 00:30 occurrence remains
-        # attached to the prior run. In weekends or exchange holidays,
-        # source-date guards stop the run rather than relabeling older data.
-        target = local_now.date() - timedelta(days=1)
+        # This confirmation cron runs at 00:30 local Tuesday-Saturday. Resolve
+        # the latest scheduled local occurrence first, including a delayed run
+        # that starts on Sunday or Monday, then target its preceding date.
+        # Exchange holidays remain guarded by the collectors rather than
+        # relabeling an older observation as the requested date.
+        occurrence_date = local_now.date()
         if local_now.timetz().replace(tzinfo=None) < scheduled_time:
-            target -= timedelta(days=1)
-        return target
+            occurrence_date -= timedelta(days=1)
+        while occurrence_date.weekday() not in MIDNIGHT_CONFIRMATION_LOCAL_WEEKDAYS:
+            occurrence_date -= timedelta(days=1)
+        return occurrence_date - timedelta(days=1)
 
     target = local_now.date()
     if local_now.timetz().replace(tzinfo=None) < scheduled_time:

@@ -67,6 +67,17 @@ def test_friday_midnight_confirmation_targets_friday_when_started_saturday() -> 
     )
 
 
+def test_delayed_saturday_confirmation_on_monday_still_targets_friday() -> None:
+    # There is no Sunday or Monday 00:30 run; a delayed Saturday run must still
+    # resolve to the latest scheduled occurrence rather than a weekend date.
+    now = datetime(2026, 9, 28, 0, 15, tzinfo=TAIPEI)
+
+    assert (
+        resolve_scheduled_target_date(now=now, schedule="30 16 * * 1-5")
+        == datetime(2026, 9, 25, tzinfo=TAIPEI).date()
+    )
+
+
 def test_unknown_schedule_is_rejected() -> None:
     with pytest.raises(ValueError, match="unsupported scheduled cron"):
         resolve_scheduled_target_date(

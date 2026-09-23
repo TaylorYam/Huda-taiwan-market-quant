@@ -23,9 +23,13 @@ on:
     - cron: "30 8 * * 1-5"
     # Confirmation pass for delayed or revised official data.
     - cron: "0 14 * * 1-5"
-    # 00:30 Asia/Taipei Tuesday-Saturday, confirming the previous local date.
-    # Run at :30 rather than the hour boundary to reduce schedule contention.
-    - cron: "30 16 * * 1-5"
+    # 00:30 Asia/Taipei Tuesday-Saturday; separate weekdays preserve the
+    # intended occurrence date when GitHub starts a run after the next cron.
+    - cron: "30 16 * * 1"
+    - cron: "30 16 * * 2"
+    - cron: "30 16 * * 3"
+    - cron: "30 16 * * 4"
+    - cron: "30 16 * * 5"
 
 permissions:
   contents: read
@@ -64,9 +68,18 @@ jobs:
         run: |
           echo "Validate supervised inputs and secrets" > "$RUNNER_TEMP/daily-market-automation-stage.txt"
           if [[ "${GITHUB_EVENT_NAME:-}" == "schedule" ]]; then
-            export REQUESTED_TARGET_DATE="$(python -m src.automation.scheduled_target \
+            if ! REQUESTED_TARGET_DATE="$(python -m src.automation.scheduled_target \
               --schedule "$SCHEDULE_CRON" \
-              --now "$(TZ=Asia/Taipei date --iso-8601=seconds)")"
+              --now "$(TZ=Asia/Taipei date --iso-8601=seconds)")"; then
+              {
+                echo "## Scheduled target resolution"
+                echo ""
+                echo "- result: safely stopped before collection or scoring"
+                echo "- reason: the official TWSE calendar could not validate the target date"
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+            export REQUESTED_TARGET_DATE
             export REQUESTED_AS_OF="$(TZ=Asia/Taipei date --iso-8601=seconds)"
             export CONFIRM_WRITE=true
             echo "Scheduled run: schedule=$SCHEDULE_CRON target_date=$REQUESTED_TARGET_DATE as_of=$REQUESTED_AS_OF"
@@ -120,8 +133,9 @@ jobs:
               echo ""
               echo "- cron (UTC): \`$SCHEDULE_CRON\`"
               echo "- target_date (Asia/Taipei): \`$REQUESTED_TARGET_DATE\`"
-              if [[ "$SCHEDULE_CRON" == "30 16 * * 1-5" ]]; then
-                echo "- pass: 00:30 Taipei confirmation of the preceding local date"
+              if [[ "$SCHEDULE_CRON" == "30 16 * * "* ]]; then
+                echo "- pass: 00:30 Taipei confirmation of the preceding TWSE trading date"
+                echo "- calendar: verified against the official TWSE holiday schedule"
               fi
             } >> "$GITHUB_STEP_SUMMARY"
           fi

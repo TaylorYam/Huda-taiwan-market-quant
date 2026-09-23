@@ -3,52 +3,84 @@
 from __future__ import annotations
 
 import argparse
+import sys
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
+from src.automation.twse_calendar import fetch_twse_closed_dates
+
 TAIPEI = ZoneInfo("Asia/Taipei")
 
-# GitHub Actions cron is UTC; these are the corresponding planned local times.
-SCHEDULE_LOCAL_TIMES = {
-    "30 8 * * 1-5": time(16, 30),
-    "0 14 * * 1-5": time(22, 0),
-    # 16:30 UTC Monday-Friday is 00:30 Asia/Taipei Tuesday-Saturday.
-    "30 16 * * 1-5": time(0, 30),
+
+@dataclass(frozen=True)
+class ScheduledPass:
+    local_time: time
+    occurrence_weekday: int | None = None
+    previous_trading_date: bool = False
+
+
+SCHEDULES = {
+    "30 8 * * 1-5": ScheduledPass(time(16, 30)),
+    "0 14 * * 1-5": ScheduledPass(time(22, 0)),
+    # Individual UTC weekdays preserve the local scheduled date if a run is
+    # delayed into the following Taipei day.
+    **{
+        f"30 16 * * {utc_weekday}": ScheduledPass(
+            time(0, 30), occurrence_weekday=utc_weekday, previous_trading_date=True
+        )
+        for utc_weekday in range(1, 6)
+    },
 }
-PREVIOUS_LOCAL_DATE_SCHEDULES = {"30 16 * * 1-5"}
-MIDNIGHT_CONFIRMATION_LOCAL_WEEKDAYS = frozenset({1, 2, 3, 4, 5})
 
 
-def resolve_scheduled_target_date(*, now: datetime, schedule: str) -> date:
+def is_midnight_confirmation_schedule(schedule: str) -> bool:
+    scheduled_pass = SCHEDULES.get(schedule)
+    return bool(scheduled_pass and scheduled_pass.previous_trading_date)
+
+
+def _previous_trading_date(candidate: date, closed_dates: frozenset[date]) -> date:
+    while candidate.weekday() >= 5 or candidate in closed_dates:
+        candidate -= timedelta(days=1)
+    return candidate
+
+
+def resolve_scheduled_target_date(
+    *, now: datetime, schedule: str, closed_dates: frozenset[date] | None = None
+) -> date:
     """Return the market date represented by a scheduled workflow run.
 
-    GitHub may start a scheduled run hours after its nominal time. If the first
-    pass is delayed past midnight in Taiwan, using ``today`` would incorrectly
-    request a future market date. The schedule's planned local time is the
-    stable boundary for deciding whether the run belongs to yesterday.
+    The weekday-specific midnight cron identifies its scheduled Taipei date,
+    even when execution crosses the next scheduled occurrence. Its target is
+    the most recent Taiwan trading date before that occurrence date. Earlier
+    scheduled passes retain their original local-time boundary behavior.
     """
 
     try:
-        scheduled_time = SCHEDULE_LOCAL_TIMES[schedule]
+        scheduled_pass = SCHEDULES[schedule]
     except KeyError as exc:
         raise ValueError(f"unsupported scheduled cron: {schedule!r}") from exc
 
     local_now = now.astimezone(TAIPEI)
-    if schedule in PREVIOUS_LOCAL_DATE_SCHEDULES:
-        # This confirmation cron runs at 00:30 local Tuesday-Saturday. Resolve
-        # the latest scheduled local occurrence first, including a delayed run
-        # that starts on Sunday or Monday, then target its preceding date.
-        # Exchange holidays remain guarded by the collectors rather than
-        # relabeling an older observation as the requested date.
-        occurrence_date = local_now.date()
-        if local_now.timetz().replace(tzinfo=None) < scheduled_time:
-            occurrence_date -= timedelta(days=1)
-        while occurrence_date.weekday() not in MIDNIGHT_CONFIRMATION_LOCAL_WEEKDAYS:
-            occurrence_date -= timedelta(days=1)
-        return occurrence_date - timedelta(days=1)
+    if scheduled_pass.previous_trading_date:
+        if closed_dates is None:
+            raise ValueError(
+                "closed_dates must be provided for midnight confirmation schedules"
+            )
+        assert scheduled_pass.occurrence_weekday is not None
+        days_since_occurrence = (
+            local_now.date().weekday() - scheduled_pass.occurrence_weekday
+        ) % 7
+        occurrence_date = local_now.date() - timedelta(days=days_since_occurrence)
+        if (
+            days_since_occurrence == 0
+            and local_now.timetz().replace(tzinfo=None) < scheduled_pass.local_time
+        ):
+            occurrence_date -= timedelta(days=7)
+        return _previous_trading_date(occurrence_date - timedelta(days=1), closed_dates)
 
     target = local_now.date()
-    if local_now.timetz().replace(tzinfo=None) < scheduled_time:
+    if local_now.timetz().replace(tzinfo=None) < scheduled_pass.local_time:
         target -= timedelta(days=1)
     return target
 
@@ -70,9 +102,23 @@ def main() -> int:
     parser.add_argument("--schedule", required=True)
     parser.add_argument("--now")
     args = parser.parse_args()
+    now = _parse_now(args.now)
+    closed_dates = None
+    if is_midnight_confirmation_schedule(args.schedule):
+        local_year = now.astimezone(TAIPEI).year
+        try:
+            closed_dates = fetch_twse_closed_dates({local_year - 1, local_year})
+        except (OSError, RuntimeError, ValueError):
+            print(
+                "Unable to verify the official TWSE trading calendar; "
+                "refusing to infer a target date.",
+                file=sys.stderr,
+            )
+            return 1
+
     print(
         resolve_scheduled_target_date(
-            now=_parse_now(args.now), schedule=args.schedule
+            now=now, schedule=args.schedule, closed_dates=closed_dates
         ).isoformat()
     )
     return 0

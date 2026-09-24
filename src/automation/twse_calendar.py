@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from datetime import date
 from typing import Any
 
@@ -13,6 +14,26 @@ TWSE_HOLIDAY_CALENDAR_URL = (
 
 _CLOSED_MARKERS = ("市場無交易", "休市", "放假", "補假", "無交易")
 _OPEN_MARKERS = ("開始交易", "最後交易", "恢復交易", "補行交易")
+_CALENDAR_REQUEST_ATTEMPTS = 3
+_CALENDAR_RETRY_DELAYS_SECONDS = (1, 3)
+
+
+def _request_error_category(exc: requests.RequestException) -> str:
+    if isinstance(exc, requests.Timeout):
+        return "timeout"
+    if isinstance(exc, requests.ConnectionError):
+        return "connection_error"
+    if isinstance(exc, requests.HTTPError):
+        status = exc.response.status_code if exc.response is not None else None
+        return f"http_{status}" if status is not None else "http_error"
+    return "request_error"
+
+
+def _is_retryable_request_error(exc: requests.RequestException) -> bool:
+    if isinstance(exc, requests.HTTPError):
+        status = exc.response.status_code if exc.response is not None else None
+        return status in {408, 429} or (status is not None and status >= 500)
+    return True
 
 
 def _parse_calendar_date(value: object) -> date:
@@ -102,26 +123,40 @@ def fetch_twse_closed_dates(
     closed: set[date] = set()
     try:
         for year in sorted(years):
-            try:
-                response = http.get(
-                    TWSE_HOLIDAY_CALENDAR_URL,
-                    params={"response": "json", "queryYear": year - 1911},
-                    headers={
-                        "Accept": "application/json",
-                        "User-Agent": "HudaTaiwanQuant/0.1",
-                    },
-                    timeout=15,
-                )
-                response.raise_for_status()
-                payload = response.json()
-            except requests.RequestException as exc:
-                raise RuntimeError(
-                    f"TWSE holiday calendar request failed for {year}"
-                ) from exc
-            except ValueError as exc:
-                raise ValueError(
-                    f"TWSE holiday calendar response was invalid for {year}"
-                ) from exc
+            for attempt in range(1, _CALENDAR_REQUEST_ATTEMPTS + 1):
+                try:
+                    response = http.get(
+                        TWSE_HOLIDAY_CALENDAR_URL,
+                        params={"response": "json", "queryYear": year - 1911},
+                        headers={
+                            "Accept": "application/json",
+                            "User-Agent": "HudaTaiwanQuant/0.1",
+                        },
+                        timeout=15,
+                    )
+                    response.raise_for_status()
+                except requests.RequestException as exc:
+                    retry = _is_retryable_request_error(exc)
+                    if retry and attempt < _CALENDAR_REQUEST_ATTEMPTS:
+                        time.sleep(_CALENDAR_RETRY_DELAYS_SECONDS[attempt - 1])
+                        continue
+                    category = _request_error_category(exc)
+                    raise RuntimeError(
+                        "TWSE holiday calendar request failed for "
+                        f"{year} after {attempt} attempt(s) ({category})"
+                    ) from exc
+
+                try:
+                    payload = response.json()
+                except ValueError as exc:
+                    if attempt < _CALENDAR_REQUEST_ATTEMPTS:
+                        time.sleep(_CALENDAR_RETRY_DELAYS_SECONDS[attempt - 1])
+                        continue
+                    raise RuntimeError(
+                        "TWSE holiday calendar returned invalid JSON for "
+                        f"{year} after {attempt} attempts (invalid_json)"
+                    ) from exc
+                break
             closed.update(parse_twse_closed_dates(payload, year=year))
     finally:
         if owns_session:

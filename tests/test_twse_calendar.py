@@ -129,3 +129,97 @@ def test_fetch_twse_calendar_wraps_network_failures() -> None:
         fetch_twse_closed_dates({2026}, session=BrokenSession())
 
     assert "private transport detail" not in str(error.value)
+
+
+def test_fetch_twse_calendar_retries_transient_timeout(monkeypatch) -> None:
+    class FlakySession(FakeSession):
+        attempts = 0
+
+        def get(self, url: str, *, params: dict, headers: dict, timeout: int):
+            self.attempts += 1
+            if self.attempts < 3:
+                raise requests.Timeout("private transport detail")
+            return FakeResponse(params["queryYear"] + 1911)
+
+    sleeps: list[float] = []
+    monkeypatch.setattr("src.automation.twse_calendar.time.sleep", sleeps.append)
+    session = FlakySession()
+
+    assert fetch_twse_closed_dates({2026}, session=session) == frozenset(
+        {date(2026, 9, 28)}
+    )
+    assert session.attempts == 3
+    assert sleeps == [1, 3]
+
+
+def test_fetch_twse_calendar_retries_temporary_server_error(monkeypatch) -> None:
+    class ServerErrorResponse:
+        def raise_for_status(self) -> None:
+            response = requests.Response()
+            response.status_code = 503
+            raise requests.HTTPError("private response detail", response=response)
+
+    class FlakySession(FakeSession):
+        attempts = 0
+
+        def get(self, url: str, *, params: dict, headers: dict, timeout: int):
+            self.attempts += 1
+            if self.attempts == 1:
+                return ServerErrorResponse()
+            return FakeResponse(params["queryYear"] + 1911)
+
+    sleeps: list[float] = []
+    monkeypatch.setattr("src.automation.twse_calendar.time.sleep", sleeps.append)
+    session = FlakySession()
+
+    assert fetch_twse_closed_dates({2026}, session=session) == frozenset(
+        {date(2026, 9, 28)}
+    )
+    assert session.attempts == 2
+    assert sleeps == [1]
+
+
+def test_fetch_twse_calendar_retries_invalid_json(monkeypatch) -> None:
+    class InvalidJsonResponse:
+        @staticmethod
+        def raise_for_status() -> None:
+            return None
+
+        @staticmethod
+        def json() -> dict:
+            raise ValueError("private response detail")
+
+    class FlakySession(FakeSession):
+        attempts = 0
+
+        def get(self, url: str, *, params: dict, headers: dict, timeout: int):
+            self.attempts += 1
+            if self.attempts == 1:
+                return InvalidJsonResponse()
+            return FakeResponse(params["queryYear"] + 1911)
+
+    sleeps: list[float] = []
+    monkeypatch.setattr("src.automation.twse_calendar.time.sleep", sleeps.append)
+    session = FlakySession()
+
+    assert fetch_twse_closed_dates({2026}, session=session) == frozenset(
+        {date(2026, 9, 28)}
+    )
+    assert session.attempts == 2
+    assert sleeps == [1]
+
+
+def test_fetch_twse_calendar_reports_safe_retry_exhaustion(monkeypatch) -> None:
+    class BrokenSession:
+        @staticmethod
+        def get(url: str, *, params: dict, headers: dict, timeout: int) -> None:
+            raise requests.Timeout("private transport detail")
+
+    sleeps: list[float] = []
+    monkeypatch.setattr("src.automation.twse_calendar.time.sleep", sleeps.append)
+
+    with pytest.raises(RuntimeError, match=r"3 attempt\(s\) \(timeout\)") as error:
+        fetch_twse_closed_dates({2026}, session=BrokenSession())
+
+    assert sleeps == [1, 3]
+    assert "private transport detail" not in str(error.value)

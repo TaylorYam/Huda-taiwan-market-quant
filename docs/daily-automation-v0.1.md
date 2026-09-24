@@ -3,27 +3,33 @@
 ## Status
 
 The workflow [`daily-market-automation.yml`](../.github/workflows/daily-market-automation.yml)
-supports explicit manual runs and three scheduled passes: 16:30 and 22:00
-Asia/Taipei on weekdays, plus 00:30 Asia/Taipei Tuesday-Saturday. The first two
+supports explicit manual runs and four scheduled passes: 16:30 and 22:00
+Asia/Taipei on weekdays, plus 00:30 and 06:30 Asia/Taipei Tuesday-Saturday. The first two
 use `30 8` and `0 14` UTC weekdays; the midnight pass uses five weekday-specific
 cron entries from `30 16 * * 1` through `30 16 * * 5` UTC. Its cron identifies
 the scheduled Taipei weekday if GitHub starts that run after the next day's
-00:30 occurrence. The midnight pass resolves the preceding TWSE trading date
+00:30 occurrence. A second set from `30 22 * * 1` through `30 22 * * 5` UTC
+provides the 06:30 Taipei confirmation after another publication window. Both
+overnight passes resolve the preceding TWSE trading date
 from the official TWSE holiday calendar, skipping weekends and listed market
 closures. If the calendar cannot be fetched or validated, the run stops before
 collection or scoring instead of guessing. Existing source-date guards stop a run
 that has no data for its requested date, before scoring. The workflow acknowledges
 the write internally and refreshes the score cutoff after all source collectors
-finish, so rows ingested by the same run are eligible for scoring. The 22:00 and
-00:30 passes confirm delayed or revised official data. Issue #18
+finish, so rows ingested by the same run are eligible for scoring. The 22:00,
+00:30, and 06:30 passes confirm delayed or revised official data. Issue #18
 still has outstanding backup/restore, access-separation, secret-rotation, quota,
 and source-attribution work, so enabling this trigger is not approval for a final
 production release.
 
-The midnight resolver reads the year-specific JSON response from the [official
+The overnight resolver reads the year-specific JSON response from the [official
 TWSE market open/closure calendar](https://www.twse.com.tw/holidaySchedule/holidaySchedule?response=html).
 It recognizes explicit closed-day and special-open-day labels; an unknown
 weekday label is treated as an invalid calendar and fails before collection.
+Timeouts, connection errors, retryable HTTP statuses, and invalid JSON receive
+up to three attempts with 1- and 3-second pauses; other HTTP errors fail fast.
+The final safe diagnostic records the error category without printing response
+bodies or transport details.
 
 ## Run contract
 
@@ -37,16 +43,16 @@ For a manual run, an operator starts **Actions → Daily market automation
   observations and the derived Market Score.
 
 The scheduled path resolves `target_date` from the cron schedule and runner time,
-then sets an initial timezone-aware `as_of` for input validation. For midnight
-confirmation, the day-specific cron preserves the originating local weekday
-across an overnight delay, while the TWSE calendar resolves the previous trading
+then sets an initial timezone-aware `as_of` for input validation. For the
+overnight confirmations, the day-specific cron preserves the originating local
+weekday across a delay, while the TWSE calendar resolves the previous trading
 date. After source
 collection it refreshes the scheduled score cutoff to the current Taipei time;
 manual runs retain their explicit `as_of`. Both paths normalize `as_of` to
 `Asia/Taipei`, reject a target date after the Taiwan as-of date, and pass the same
-target date to the date-specific collectors. The 00:30 Asia/Taipei schedule
-targets the preceding TWSE trading date, including Friday when the Saturday
-morning pass follows a weekend. A Taiwan market holiday is skipped using the
+target date to the date-specific collectors. The 00:30 and 06:30 Asia/Taipei
+schedules target the preceding TWSE trading date, including Friday when the
+Saturday morning passes follow a weekend. A Taiwan market holiday is skipped using the
 official calendar; a delayed/unavailable source still fails its expected-date
 guard. Repeating a run with the same inputs is supported:
 the existing observation and Market Score writers preserve duplicate detection and
@@ -116,9 +122,9 @@ so reruns should use the same explicit inputs after the cause is addressed.
 
 The scheduled automation intentionally skips the prior three-trading-day
 observation gate. The 16:30 pass is the first collection; the 22:00 pass repeats the same
-target-date collection, and the 00:30 pass on the following Taipei date retries
-the preceding TWSE trading date once more for late or revised source data. The
-midnight target uses the official TWSE calendar; a missing or invalid calendar
+target-date collection. The 00:30 and 06:30 passes on the following Taipei date
+provide two more attempts for late or revised source data. The overnight targets
+use the official TWSE calendar; a missing or invalid calendar
 stops the run before any data writes. The
 one-writer concurrency group, strict source/date guards, bounded source retries,
 and failure summary remain active. The failure summary identifies when scoring

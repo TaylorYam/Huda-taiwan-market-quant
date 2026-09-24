@@ -115,7 +115,7 @@ Dashboard 只讀取已計算的結果；資料庫寫入由 GitHub Actions 負責
 
 ## Data and state
 
-預計保存兩層資料：
+目前保存兩層資料：
 
 1. **Raw data**：保留每日官方來源資料的必要欄位
 2. **Derived data**：Factor Score、Market Score 與操作方向
@@ -172,8 +172,6 @@ Dashboard 只讀取已計算的結果；資料庫寫入由 GitHub Actions 負責
 - 權重與門檻皆視為待回測的初始假設
 - 第一版不以機器學習預測明日漲跌為主要方向
 - Phase 1 本機開發採用被 Git 忽略的 SQLite；正式持久化 MVP 堆疊見 [ADR 0002](adr/0002-free-tier-mvp-stack.md)，傳輸層見 [ADR 0003](adr/0003-supabase-data-api-transport.md)，展示託管見 [ADR 0004](adr/0004-streamlit-demo-hosting.md)
-
-後續若這些決策成為長期架構基礎，可另外建立 ADR。
 
 ## Updating this document
 

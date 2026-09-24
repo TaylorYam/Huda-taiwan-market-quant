@@ -405,23 +405,25 @@ def build_tradingview_kline_html(
     payload = json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
     score_payload = json.dumps(score_rows, ensure_ascii=False, separators=(",", ":"))
     factor_rows_payload: dict[str, list[dict[str, object]]] = {}
-    if factor_plot is not None and not factor_plot.empty:
-        factor_columns = [column for column in factor_plot.columns if column != "日期"]
-        for factor_label in factor_columns:
+    if factor_plot is not None:
+        factor_by_date = {
+            row["日期"]: row
+            for row in factor_plot.to_dict("records")
+            if isinstance(row.get("日期"), str) and row["日期"]
+        }
+        for factor_label in FACTOR_LABELS.values():
             factor_rows_for_chart = []
-            has_value = False
-            for row in factor_plot.to_dict("records"):
-                date = row.get("日期")
-                if not isinstance(date, str) or not date:
-                    continue
-                value = _finite_number(row.get(factor_label), minimum=0, maximum=100)
+            for candle in rows:
+                date = candle["time"]
+                factor_row = factor_by_date.get(date, {})
+                value = _finite_number(
+                    factor_row.get(factor_label), minimum=0, maximum=100
+                )
                 point: dict[str, object] = {"time": date}
                 if value is not None:
                     point["value"] = round(value, 1)
-                    has_value = True
                 factor_rows_for_chart.append(point)
-            if has_value:
-                factor_rows_payload[factor_label] = factor_rows_for_chart
+            factor_rows_payload[factor_label] = factor_rows_for_chart
     factor_payload = json.dumps(
         factor_rows_payload, ensure_ascii=False, separators=(",", ":")
     )

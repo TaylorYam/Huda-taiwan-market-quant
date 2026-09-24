@@ -91,3 +91,18 @@ def test_tx_contract_keys_do_not_make_legitimate_contract_rows_duplicates():
     assert dataset["duplicate_dates"] == []
     assert dataset["available_date_count"] == 1
     assert report["gate_status"] == "pass"
+
+
+def test_unexpected_source_date_fails_even_if_calendar_has_no_missing_date():
+    report = build_taifex_quality_report(
+        {"taifex_txo_oi_pcr_v1": ["2024-01-02", "2024-01-03"]},
+        expected_dates=["2024-01-02"],
+        calendar_status="available",
+        calendar_source="TAIFEX fixture",
+    )
+
+    dataset = report["datasets"]["taifex_txo_oi_pcr_v1"]
+    assert report["gate_status"] == "fail"
+    assert dataset["missing_dates"] == []
+    assert dataset["unexpected_dates"] == ["2024-01-03"]
+    assert dataset["coverage"]["ratio"] == 1.0

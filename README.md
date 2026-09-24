@@ -120,7 +120,7 @@ Streamlit Community Cloud：唯讀 Dashboard
 - [x] 建立官方資料收集、品質檢查與可重跑的持久化介面（Phase 1；正式資料庫驗收仍待完成）
 - [x] 實作 8 個因子與 Market Score（Phase 2；缺必要資料時明確標示 unavailable）
 - [ ] 用真實歷史資料驗證分數辨識力；通過後才做策略層回測（Phase 3）
-- [x] 建立唯讀 Dashboard、CI 與每日／手動資料流程（Phase 4；外部部署與正式維運閘門仍待完成）
+- [x] 建立並公開唯讀 Dashboard、CI 與每日／手動資料流程（Phase 4；最新排程修正及正式維運閘門仍待驗收）
 
 ## 專案結構
 
@@ -163,8 +163,9 @@ Streamlit Community Cloud：唯讀 Dashboard
 
 此展示入口供主管快速查看最新已儲存結果及維護者檢查來源品質；
 使用 Streamlit Python 伺服器呼叫 Supabase Data API，不在頁面重算分數。
-`streamlit_app.py` 已在 main，入口可本機啟動；公開展示採 Streamlit Community Cloud，
-外部部署與資料／權限驗收仍見 [公開展示部署 runbook](docs/demo-deployment.md)。
+`streamlit_app.py` 已在 main，入口可本機啟動；[公開展示網站](https://huda-taiwan-market-quant-5f2taszopumzppuwyult9c.streamlit.app/)
+部署於 Streamlit Community Cloud。網站已上線不代表最新正式排程或備份、權限與配額驗收完成；
+已驗收的展示範圍及待辦見 [公開展示部署 runbook](docs/demo-deployment.md)。
 
 在 repository 根目錄執行（Python 3.12+）：
 
@@ -185,7 +186,8 @@ python -m streamlit run streamlit_app.py
 - 最新結果依 `target_date DESC, created_at DESC, id DESC` 選一筆，跨模型版本。
   最新結果若 unavailable，不退回較舊的 available 分數。
 - 顯示分類／因子列、target、as-of、模型、分數寫入時間與 unavailable 原因。
-  現有持久化格式沒有因子原始值／分類總分，因此不自行推算。
+  新寫入的分數紀錄在 `factor_scores_json` 保留因子原始值與計算證據，網站以原始單位顯示；
+  舊紀錄若未保存原始值，會明確顯示缺漏。網站不自行重算因子或分類總分。
 - 來源區列出七個已實作來源各自最近擷取的一筆紀錄、品質狀態與擷取時間。
   這是來源更新概況，並非分數的 as-of 證據或全部資料品質摘要；
   未持久化的失敗擷取無法由此得知。外資現貨分子與市場成交金額分母分開列示，
@@ -221,7 +223,7 @@ python -m ruff format --check src tests streamlit_app.py
 
 ## 公開展示部署路線
 
-目前 main 已提供 Streamlit 可執行頁面；最快免費展示方案採 Streamlit Community Cloud，
+目前展示網站已部署於 Streamlit Community Cloud；
 Vercel 路線保留為未來前端／API 重構選項。完整部署欄位、環境變數邊界、smoke check
 與 PR #46 合併後 Supabase integration 驗收見
 [公開展示部署 runbook](docs/demo-deployment.md) 與 [ADR 0004](docs/adr/0004-streamlit-demo-hosting.md)。

@@ -50,28 +50,28 @@ def test_delayed_midnight_confirmation_keeps_previous_date() -> None:
 
 
 def test_later_morning_confirmation_targets_previous_trading_date() -> None:
-    # Monday's 22:30 UTC cron is Tuesday at 06:30 in Taipei and targets Monday.
-    now = datetime(2026, 9, 21, 22, 35, tzinfo=ZoneInfo("UTC"))
+    # Tuesday's 02:30 UTC cron is Tuesday at 10:30 in Taipei and targets Monday.
+    now = datetime(2026, 9, 22, 2, 35, tzinfo=ZoneInfo("UTC"))
 
     assert resolve_scheduled_target_date(
-        now=now, schedule="30 22 * * 1", closed_dates=frozenset()
+        now=now, schedule="30 2 * * 2", closed_dates=frozenset()
     ) == date(2026, 9, 21)
 
 
 def test_later_morning_confirmation_targets_friday_on_saturday() -> None:
-    now = datetime(2026, 9, 25, 22, 35, tzinfo=ZoneInfo("UTC"))
+    now = datetime(2026, 9, 26, 2, 35, tzinfo=ZoneInfo("UTC"))
 
     assert resolve_scheduled_target_date(
-        now=now, schedule="30 22 * * 5", closed_dates=frozenset()
+        now=now, schedule="30 2 * * 6", closed_dates=frozenset()
     ) == date(2026, 9, 25)
 
 
 def test_later_morning_confirmation_skips_official_holiday() -> None:
-    now = datetime(2026, 9, 28, 22, 40, tzinfo=ZoneInfo("UTC"))
+    now = datetime(2026, 9, 29, 2, 40, tzinfo=ZoneInfo("UTC"))
 
     assert resolve_scheduled_target_date(
         now=now,
-        schedule="30 22 * * 1",
+        schedule="30 2 * * 2",
         closed_dates=frozenset({date(2026, 9, 28)}),
     ) == date(2026, 9, 25)
 
@@ -79,11 +79,11 @@ def test_later_morning_confirmation_skips_official_holiday() -> None:
 def test_delayed_later_morning_confirmation_keeps_target_after_next_occurrence() -> (
     None
 ):
-    # Monday's cron still identifies Monday after Tuesday's cron is eligible.
-    now = datetime(2026, 9, 23, 7, 0, tzinfo=TAIPEI)
+    # Tuesday's cron still identifies Monday after Wednesday's cron is eligible.
+    now = datetime(2026, 9, 24, 11, 0, tzinfo=TAIPEI)
 
     assert resolve_scheduled_target_date(
-        now=now, schedule="30 22 * * 1", closed_dates=frozenset()
+        now=now, schedule="30 2 * * 2", closed_dates=frozenset()
     ) == date(2026, 9, 21)
 
 

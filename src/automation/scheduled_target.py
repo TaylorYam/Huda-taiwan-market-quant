@@ -31,6 +31,13 @@ SCHEDULES = {
         )
         for utc_weekday in range(1, 6)
     },
+    # Later morning retry: 22:30 UTC is 06:30 on the following Taipei date.
+    **{
+        f"30 22 * * {utc_weekday}": ScheduledPass(
+            time(6, 30), occurrence_weekday=utc_weekday, previous_trading_date=True
+        )
+        for utc_weekday in range(1, 6)
+    },
 }
 
 
@@ -50,7 +57,7 @@ def resolve_scheduled_target_date(
 ) -> date:
     """Return the market date represented by a scheduled workflow run.
 
-    The weekday-specific midnight cron identifies its scheduled Taipei date,
+    The weekday-specific overnight cron identifies its scheduled Taipei date,
     even when execution crosses the next scheduled occurrence. Its target is
     the most recent Taiwan trading date before that occurrence date. Earlier
     scheduled passes retain their original local-time boundary behavior.
@@ -108,10 +115,10 @@ def main() -> int:
         local_year = now.astimezone(TAIPEI).year
         try:
             closed_dates = fetch_twse_closed_dates({local_year - 1, local_year})
-        except (OSError, RuntimeError, ValueError):
+        except (OSError, RuntimeError, ValueError) as exc:
             print(
                 "Unable to verify the official TWSE trading calendar; "
-                "refusing to infer a target date.",
+                f"refusing to infer a target date ({type(exc).__name__}: {exc}).",
                 file=sys.stderr,
             )
             return 1

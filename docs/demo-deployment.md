@@ -3,15 +3,17 @@
 ## 目前狀態與依賴
 
 採用 [ADR 0004](adr/0004-streamlit-demo-hosting.md) 的 Streamlit Community Cloud 免費展示路線。
-目前 `main` 已包含 `streamlit_app.py`、唯讀 Dashboard 與 Demo readiness smoke；本文件提供部署設定與驗收程序，不宣稱網站已上線。
-不以空白 placeholder 頁面冒充 Dashboard。本文件不授權生產部署或付費資源。
+目前 `main` 已包含 `streamlit_app.py`、唯讀 Dashboard 與 Demo readiness smoke；
+公開網站已完成初次展示驗收。本文件保留部署設定與後續驗收程序，
+初次展示成功不代表最新正式排程、資料完整性或權限／備份驗收完成。
 
 ## 實際展示驗收（2026-09-18）
 
 - 公開網址：[Huda｜台指大盤](https://huda-taiwan-market-quant-5f2taszopumzppuwyult9c.streamlit.app/)
 - 部署來源：`TaylorYam/Huda-taiwan-market-quant` 的 `main`，驗收 commit `a31420a`
 - 未登入瀏覽器可載入頁面標題、唯讀展示標示與來源資料品質表；Supabase 連線設定已由 Streamlit Secrets 提供，頁面未出現連線錯誤。
-- 目前 `market_scores` 尚無資料，因此頁面顯示「尚無 Market Score」；這是刻意保留的展示狀態，評分寫入與每日流程排在展示版驗收之後。
+- 上述驗收僅代表 2026-09-18 當時的頁面狀態；當時 `market_scores` 尚無資料。
+  後續已加入評分寫入、因子原始值與每日流程，不能沿用這筆舊紀錄判斷今天的資料狀態。
 
 ## 部署設定
 
@@ -41,7 +43,7 @@ Python 及安裝套件版本；本 repo 的 requirements.txt 目前未鎖定全�
 
 Dashboard 已有 server-side 唯讀讀取路徑，啟動時要求 `SUPABASE_URL` 與 `SUPABASE_SECRET_KEY`；
 它也會拒絕非 HTTPS、含帳密、查詢參數或 fragment 的 URL。這把 key 可繞過 RLS，不應直接視為真正的 read-only credential。不要為了讓展示有資料就把 key 放到瀏覽器或前端環境變數；
-日後需 Streamlit secrets 時由管理介面配置，
+Streamlit secrets 由管理介面配置，
 root-level secrets 可映射環境變數；`.streamlit/secrets.toml` 受現有 `secrets.*` ignore 規則保護。
 `.env` 不會由本專案自動載入。檢查紀錄只留 secret 名稱與通過狀態。
 
@@ -90,8 +92,8 @@ GitHub Actions 的 **Demo readiness smoke** 可手動執行，無 secrets、無�
    `SUPABASE_URL`、`SUPABASE_SECRET_KEY`，確認兩表 Data API 可讀取。
    檢查程式不新增觀察值；綠燈不等於 migration history、RLS 或資料完整性已驗收。
 7. 確認 migration 不應搬移 SQLite 既有資料；受控 export／import 是 #45 與 operations runbook
-   的獨立步驟。資料筆數、修訂 lineage、最新日期、備份還原與 #18 正式排程閘門未驗收前，
-   不啟用生產 daily writes。本 demo PR 不執行這些外部變更。
+   的獨立步驟。資料筆數、修訂 lineage、最新日期、備份還原與 #18 維運閘門
+   必須各自驗收；既有 daily writes 與網站可用不能替代這些證據。
 
 ## 回復與外部待辦
 
@@ -99,9 +101,10 @@ GitHub Actions 的 **Demo readiness smoke** 可手動執行，無 secrets、無�
 回復 main 的部署變更需走新 PR；回復已知良好版本後重跑 AppTest、health 及 UI 驗收。
 不得透過刪表回復 demo。必要時由維護者停止 Community Cloud app。
 
-尚需外部確認：Community Cloud 登入／授權／公開 URL、雲端 Python 3.12
-建置與互動、Supabase integration 設定與 migration history、RLS／權限及 Data API smoke。
-這些項目與平台免費方案現況須由管理者現場確認，不能由本機測試替代。
+初次 Community Cloud 公開 URL 與頁面載入已於 2026-09-18 驗收；
+雲端版本重建與互動、Supabase integration 的 migration history、RLS／權限、
+備份還原、配額及最新 daily workflow 的正式排程結果仍須個別驗收。
+不能由本機測試或早期展示紀錄替代。
 
 參考：[Community Cloud secrets](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/secrets-management)、
 [Supabase GitHub integration](https://supabase.com/docs/guides/deployment/branching/github-integration)、

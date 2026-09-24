@@ -22,12 +22,12 @@
 
 主要外部資料來源：
 
-- TWSE：TAIEX、三大法人、融資融券等
-- TAIFEX：台指期行情、法人期貨部位、Put/Call Ratio、選擇權 OI、Taiwan VIX 等
+- TWSE：TAIEX、外資現貨買賣超、市場成交金額
+- TAIFEX：台指期行情、法人期貨部位、選擇權 OI Put/Call Ratio、Taiwan VIX
 
 ## Components and boundaries
 
-預計架構：
+目前免費 MVP 架構：
 
 ```text
 TWSE / TAIFEX
@@ -46,7 +46,7 @@ Market Direction Result
      ↓
 Supabase Free PostgreSQL / Data API
      ↓
-Vercel Hobby Dashboard
+Streamlit Community Cloud 唯讀 Dashboard
 ```
 
 ### Data Collectors
@@ -85,7 +85,7 @@ Vercel Hobby Dashboard
 
 ### Backtest Engine
 
-下一階段建立，用來驗證：
+第一層回測引擎已建立；真實歷史資料驗證仍待執行，用來回答：
 
 - 高分是否對未來 5 / 10 / 20 日報酬有辨識力
 - 權重是否需要調整
@@ -94,10 +94,10 @@ Vercel Hobby Dashboard
 
 ### Web Dashboard
 
-本機可啟動的唯讀 Streamlit MVP 入口為 `streamlit_app.py`。
+已公開部署的唯讀 Streamlit MVP 入口為 `streamlit_app.py`。
 Python 伺服器透過 Supabase Data API 讀取最新持久化 Market Score 與各來源
-最近擷取紀錄；secret key 只存在伺服器環境。此展示入口不改變下列正式部署方向，
-不重算分數、不寫入資料。啟動與資料缺漏限制見 README。
+最近擷取紀錄；secret key 只存在伺服器環境。不重算分數、不寫入資料。
+公開網址、啟動與資料缺漏限制見 README。
 
 網站第一版重點是「先顯示結論，再顯示原因」。
 
@@ -105,11 +105,13 @@ Python 伺服器透過 Supabase Data API 讀取最新持久化 Market Score 與�
 
 - 今日 Market Score
 - 操作方向
-- 分類因子分數
-- 8 個核心原始值
-- 最近更新時間
+- 按分類排列的因子分數
+- 可取得的 8 個核心因子原始值
+- 資料截至日期
 
-Dashboard 只讀取已計算的結果；資料庫寫入由 GitHub Actions 負責。Vercel Hobby 只作網站、讀取 API 與選用的觸發端點，不把執行期本機檔案當成持久資料庫。
+Dashboard 只讀取已計算的結果；資料庫寫入由 GitHub Actions 負責。
+新的 `factor_scores_json` 紀錄包含因子原始值與計算證據，舊紀錄可能缺少；
+網站不因缺漏而臨時計算因子。Streamlit 執行期本機檔案不是持久資料庫。
 
 ## Data and state
 
@@ -120,22 +122,22 @@ Dashboard 只讀取已計算的結果；資料庫寫入由 GitHub Actions 負責
 
 歷史資料需可供回測重算，避免只保存最新一天結果。
 
-欄位、時間戳、單位、修訂及缺值的共同語義見 [`data-contract-v0.1.md`](data-contract-v0.1.md)。Phase 1 本機開發儲存方案的比較與建議見 [`data-storage-options-v0.1.md`](data-storage-options-v0.1.md)，實作邊界見 [`storage-interface-v0.1.md`](storage-interface-v0.1.md)；正式排程的候選類型與驗收閘門見 [`production-persistence-decision-v0.1.md`](production-persistence-decision-v0.1.md)，持久來源、格式與保留期仍須經 Accepted ADR 決定。
+欄位、時間戳、單位、修訂及缺值的共同語義見 [`data-contract-v0.1.md`](data-contract-v0.1.md)。Phase 1 本機開發儲存方案的比較與建議見 [`data-storage-options-v0.1.md`](data-storage-options-v0.1.md)，實作邊界見 [`storage-interface-v0.1.md`](storage-interface-v0.1.md)。正式持久來源與傳輸方式分別由 [ADR 0002](adr/0002-free-tier-mvp-stack.md) 與 [ADR 0003](adr/0003-supabase-data-api-transport.md) 決定；備份、權限與配額驗收仍待完成。
 
 生成的 runtime cache、credentials 與 populated `.env` 不應提交到 Git。
 
 ## Runtime and deployment
 
-預計：
+目前配置：
 
 - Python 作為資料抓取與量化計算核心
 - GitHub Actions 每日台股收盤後自動執行，透過 Supabase Data API 將結果寫入 Supabase Free PostgreSQL
-- Vercel Hobby 提供簡易 Web Dashboard 與唯讀查詢 API
+- Streamlit Community Cloud 提供公開的唯讀 Web Dashboard
 - 本機 SQLite 保留為開發與遷移測試資料庫
 
 第一版目標是不需要使用者每天手動更新資料，也不要求本機電腦持續開機。
 
-免費 MVP 的限制與升級條件記錄在 [ADR 0002](adr/0002-free-tier-mvp-stack.md)；Data API 傳輸方式見 [ADR 0003](adr/0003-supabase-data-api-transport.md)。在手動匯出、還原演練、權限分離與配額監控完成前，不啟用無人值守的正式每日流程。
+免費 MVP 的限制與升級條件記錄在 [ADR 0002](adr/0002-free-tier-mvp-stack.md)；Data API 傳輸方式見 [ADR 0003](adr/0003-supabase-data-api-transport.md)，展示託管選擇見 [ADR 0004](adr/0004-streamlit-demo-hosting.md)。每日排程已配置；最新評分修正後的正式排程驗收，以及手動匯出、還原演練、權限分離與配額監控仍是待辦，不能以網站可用或手動工作成功取代。
 
 ## Quality attributes and constraints
 
@@ -166,10 +168,10 @@ Dashboard 只讀取已計算的結果；資料庫寫入由 GitHub Actions 負責
 
 - v0.1 採 8 因子可解釋規則模型
 - 第一版優先使用 TWSE + TAIFEX 官方免費來源
-- 免費 MVP 堆疊採 GitHub Actions + Supabase Free PostgreSQL Data API + Vercel Hobby
+- 免費 MVP 堆疊採 GitHub Actions + Supabase Free PostgreSQL Data API + Streamlit Community Cloud
 - 權重與門檻皆視為待回測的初始假設
 - 第一版不以機器學習預測明日漲跌為主要方向
-- Phase 1 本機開發採用被 Git 忽略的 SQLite；正式持久化 MVP 堆疊見 [ADR 0002](adr/0002-free-tier-mvp-stack.md)，傳輸層見 [ADR 0003](adr/0003-supabase-data-api-transport.md)
+- Phase 1 本機開發採用被 Git 忽略的 SQLite；正式持久化 MVP 堆疊見 [ADR 0002](adr/0002-free-tier-mvp-stack.md)，傳輸層見 [ADR 0003](adr/0003-supabase-data-api-transport.md)，展示託管見 [ADR 0004](adr/0004-streamlit-demo-hosting.md)
 
 後續若這些決策成為長期架構基礎，可另外建立 ADR。
 
@@ -177,12 +179,7 @@ Dashboard 只讀取已計算的結果；資料庫寫入由 GitHub Actions 負責
 
 當資料流、部署方式、核心模型邊界或重要限制發生變更時，應同步更新本文件。
 
-尚未實作的元件及其順序、驗收條件與 GitHub Issue 草案見 [`roadmap-v0.1.md`](roadmap-v0.1.md)。持久儲存、排程資料留存等長期架構選擇仍依 ADR 流程決議，不在此先行指定技術。
-
-### 公開展示路線修訂（2026-09-17）
-
-上文 Vercel 為 ADR 0002 的原始目標；目前 repo 未提供 ASGI／WSGI handler 或前端 build。
-本次展示改採 Streamlit Community Cloud（[ADR 0004](adr/0004-streamlit-demo-hosting.md)），
-待獨立 Dashboard 工作提供 `streamlit_app.py` 後部署。GitHub Actions 與 Supabase 持久化不變；
-首次無憑證 demo 不讀寫 Supabase。驗收、資料唯讀權限與外部操作閘門見
+尚未實作的元件及其順序、驗收條件與 GitHub Issue 草案見 [`roadmap-v0.1.md`](roadmap-v0.1.md)。
+原先在 ADR 0002 規劃的 Vercel Dashboard 已由 [ADR 0004](adr/0004-streamlit-demo-hosting.md)
+改為 Streamlit Community Cloud；已完成的展示驗收與剩餘外部操作閘門見
 [部署 runbook](demo-deployment.md)。

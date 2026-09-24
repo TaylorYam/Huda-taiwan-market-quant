@@ -1,3 +1,4 @@
+import json
 from copy import deepcopy
 from unittest.mock import MagicMock, patch
 
@@ -509,6 +510,33 @@ def test_tradingview_kline_html_links_selected_factor_pane():
         not in html.split(".factor-tabs", 1)[1].split(".factor-tab", 1)[0]
     )
     assert "white-space: nowrap" in html.split(".factor-tab {", 1)[1].split("}", 1)[0]
+
+
+def test_tradingview_factor_tabs_keep_missing_history_blank():
+    ohlc = pd.DataFrame(
+        [
+            {"日期": date, "open": 1, "high": 3, "low": 0.5, "close": 2}
+            for date in ("2026-09-16", "2026-09-17")
+        ]
+    )
+    factor_plot = pd.DataFrame([{"日期": "2026-09-17", "TAIEX 均線趨勢": 75.04}])
+    html = build_tradingview_kline_html(ohlc, factor_plot=factor_plot)
+
+    assert html is not None
+    factor_json = html.split("const factorData = ", 1)[1].split(";", 1)[0]
+    factor_data = json.loads(factor_json)
+    assert len(factor_data) == 8
+    assert factor_data["TAIEX 均線趨勢"] == [
+        {"time": "2026-09-16"},
+        {"time": "2026-09-17", "value": 75.0},
+    ]
+    assert factor_data["Taiwan VIX"] == [
+        {"time": "2026-09-16"},
+        {"time": "2026-09-17"},
+    ]
+    assert 'id="factor-tabs"' in build_tradingview_kline_html(
+        ohlc, factor_plot=pd.DataFrame()
+    )
 
 
 def test_dashboard_renders_history_charts_without_recomputing(monkeypatch):

@@ -3,10 +3,12 @@ from datetime import date, timedelta
 
 import pytest
 from test_daily_score_pipeline import _observation
+from test_scoring_history import _dense_fixtures
+from test_scoring_history import _observation as _history_observation
 from test_supabase_rest import FakeResponse, FakeSession
 
 from src.data.supabase_rest import SupabaseRestObservationStore
-from src.scoring.daily_runner import main, run_daily_score
+from src.scoring.daily_runner import UnavailableMarketScore, main, run_daily_score
 
 
 @pytest.fixture
@@ -59,11 +61,17 @@ class MemoryApi(FakeSession):
         return response
 
 
-def run(session, as_of="2026-09-17T20:00:00+08:00"):
+def run(session, as_of="2026-09-17T20:00:00+08:00", *, require_available=False):
     with SupabaseRestObservationStore(
         "https://example.supabase.co", "test-only", session=session
     ) as store:
-        return run_daily_score(store, store, target_date="2026-09-17", as_of=as_of)
+        return run_daily_score(
+            store,
+            store,
+            target_date="2026-09-17",
+            as_of=as_of,
+            require_available=require_available,
+        )
 
 
 def test_paged_read_persists_unavailable_and_replay_is_duplicate(observations):
@@ -115,6 +123,87 @@ def test_empty_sources_still_persist_unavailable():
     result = run(api)
     assert result["status"] == "unavailable"
     assert len(result["missing_factor_ids"]) == 8
+    assert len(api.scores) == 1
+
+
+def test_integrated_cli_rejects_unavailable_without_publishing(monkeypatch, capsys):
+    api = MemoryApi([])
+
+    def connect(*args, **kwargs):
+        return SupabaseRestObservationStore(
+            "https://example.supabase.co", "test-only", session=api
+        )
+
+    monkeypatch.setattr(
+        "src.scoring.daily_runner.SupabaseRestObservationStore", connect
+    )
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "test-only")
+
+    assert (
+        main(
+            [
+                "--target-date",
+                "2026-09-17",
+                "--as-of",
+                "2026-09-17T20:00:00+08:00",
+                "--require-available",
+            ]
+        )
+        == 1
+    )
+    assert not api.scores
+    output = capsys.readouterr()
+    assert "Market Score unavailable" in output.err
+    assert "missing required factors" in output.err
+    assert "test-only" not in output.err + output.out
+
+
+def test_late_institutional_write_needs_post_collection_cutoff():
+    target = date(2026, 9, 17)
+    taiex, pcr, tx, institutional = _dense_fixtures(target, span_days=59)
+    institutional[-1] = replace(
+        institutional[-1],
+        retrieved_at="2026-09-18T01:55:00Z",
+        ingested_at="2026-09-18T01:55:00Z",
+    )
+    vix = [
+        _history_observation(
+            "taifex_taiwan_vix_close_v1",
+            target - timedelta(days=offset),
+            {"close": 20 + offset / 100},
+            "VIX",
+        )
+        for offset in range(59, -1, -1)
+    ]
+    cash = [
+        _history_observation(
+            "twse_foreign_cash_bfi82u_v1",
+            target - timedelta(days=offset),
+            {"net_buy_sell": -1000.0, "category": "外資及陸資"},
+            "BFI82U:foreign",
+        )
+        for offset in range(59, -1, -1)
+    ]
+    turnover = [
+        _history_observation(
+            "twse_market_turnover_fmtqik_v1",
+            target - timedelta(days=offset),
+            {"turnover": 100_000.0},
+            "FMTQIK:market",
+        )
+        for offset in range(59, -1, -1)
+    ]
+    api = MemoryApi([*taiex, *pcr, *tx, *institutional, *vix, *cash, *turnover])
+
+    with pytest.raises(UnavailableMarketScore, match="foreign_tx_net_position"):
+        run(api, "2026-09-18T09:53:23+08:00", require_available=True)
+    assert api.scores == []
+
+    later = run(api, "2026-09-18T10:10:26+08:00", require_available=True)
+    assert later["status"] == "available"
+    assert later["score"] is not None
+    assert later["missing_factor_ids"] == []
     assert len(api.scores) == 1
 
 

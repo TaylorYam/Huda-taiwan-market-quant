@@ -36,6 +36,10 @@ DATASETS = (
 TAIPEI = timezone(timedelta(hours=8))
 
 
+class UnavailableMarketScore(ValueError):
+    """Required factors are missing from an integrated daily update."""
+
+
 class ScoreObservationReader(Protocol):
     def load_score_observations(
         self, *, dataset_ids: tuple[str, ...], target_date: str, as_of: str
@@ -84,8 +88,9 @@ def run_daily_score(
     *,
     target_date: str,
     as_of: str,
+    require_available: bool = False,
 ) -> dict[str, object]:
-    """Persist unavailable results too; transport failures must propagate.
+    """Persist point-in-time results; optionally require a complete live score.
 
     Percentile history is built by :func:`build_historical_values`, which
     replays each factor's own point-in-time adapter over its trailing window
@@ -136,6 +141,12 @@ def run_daily_score(
         as_of=canonical_as_of,
         historical_values=historical_values,
     )
+    if require_available and not result.market_score.available:
+        missing = ", ".join(result.market_score.missing_factor_ids) or "unknown"
+        raise UnavailableMarketScore(
+            f"Market Score unavailable: missing required factors: {missing}; "
+            "no Market Score was written"
+        )
     record, outcome = persist_market_score(writer, result)
     return {
         "target_date": record.target_date,
@@ -155,6 +166,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target-date", required=True, help="Taiwan date YYYY-MM-DD")
     parser.add_argument("--as-of", required=True, help="ISO timestamp with timezone")
+    parser.add_argument(
+        "--require-available",
+        action="store_true",
+        help="Fail before writing if required factors are unavailable",
+    )
     args = parser.parse_args(argv)
     # Validate before connecting; never print remote errors, URLs or credentials.
     try:
@@ -164,8 +180,15 @@ def main(argv: list[str] | None = None) -> int:
         with SupabaseRestObservationStore(url, key) as store:
             store.verify_table("market_scores")
             summary = run_daily_score(
-                store, store, target_date=args.target_date, as_of=args.as_of
+                store,
+                store,
+                target_date=args.target_date,
+                as_of=args.as_of,
+                require_available=args.require_available,
             )
+    except UnavailableMarketScore as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
     except Exception:  # noqa: BLE001 - CLI boundary must redact transport errors
         print(
             "Daily score failed. Check dates, server configuration, table access "

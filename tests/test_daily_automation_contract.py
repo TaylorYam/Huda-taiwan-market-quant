@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from src.data.storage import Observation
 from src.data.supabase_rest import MarketScoreWriteResult
 from src.scoring.daily_runner import run_daily_score
@@ -58,3 +60,20 @@ def test_daily_runner_contract_preserves_explicit_window_and_unavailable_result(
     assert summary["action"] == "inserted"
     assert writer.records[0]["status"] == "unavailable"
     assert writer.records[0]["score"] is None
+
+
+def test_integrated_run_rejects_unavailable_score_before_persistence() -> None:
+    """A green collection must not publish a score missing required factors."""
+    reader = EmptyReader()
+    writer = RecordingWriter()
+
+    with pytest.raises(ValueError, match="Market Score unavailable"):
+        run_daily_score(
+            reader,
+            writer,
+            target_date="2026-09-17",
+            as_of="2026-09-17T20:00:00+08:00",
+            require_available=True,
+        )
+
+    assert writer.records == []

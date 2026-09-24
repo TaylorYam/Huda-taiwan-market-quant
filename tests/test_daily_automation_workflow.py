@@ -21,7 +21,8 @@ def test_workflow_has_taipei_midnight_confirmation_and_preserves_guards() -> Non
     assert '- cron: "0 14 * * 1-5"' in text
     for utc_weekday in range(1, 6):
         assert f'- cron: "30 16 * * {utc_weekday}"' in text
-        assert f'- cron: "30 22 * * {utc_weekday}"' in text
+    for utc_weekday in range(2, 7):
+        assert f'- cron: "30 2 * * {utc_weekday}"' in text
     assert (
         'python -m src.automation.scheduled_target \\\n              --schedule "$SCHEDULE_CRON"'
         in text
@@ -36,5 +37,5 @@ def test_workflow_has_taipei_midnight_confirmation_and_preserves_guards() -> Non
     assert "the mismatched snapshot was rejected before persistence" in text
     assert "Market Score: not run" in text
     assert "preceding TWSE trading date" in text
-    assert "06:30 Taipei" in text
+    assert "10:30 Taipei" in text
     assert "official TWSE calendar could not validate the target date" in text

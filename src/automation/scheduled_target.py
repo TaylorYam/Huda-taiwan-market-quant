@@ -31,12 +31,14 @@ SCHEDULES = {
         )
         for utc_weekday in range(1, 6)
     },
-    # Later morning retry: 22:30 UTC is 06:30 on the following Taipei date.
+    # Later morning retry: 02:30 UTC is 10:30 on the same Taipei date.
     **{
-        f"30 22 * * {utc_weekday}": ScheduledPass(
-            time(6, 30), occurrence_weekday=utc_weekday, previous_trading_date=True
+        f"30 2 * * {local_weekday + 1}": ScheduledPass(
+            time(10, 30),
+            occurrence_weekday=local_weekday,
+            previous_trading_date=True,
         )
-        for utc_weekday in range(1, 6)
+        for local_weekday in range(1, 6)
     },
 }
 

@@ -4,12 +4,12 @@
 
 The workflow [`daily-market-automation.yml`](../.github/workflows/daily-market-automation.yml)
 supports explicit manual runs and four scheduled passes: 16:30 and 22:00
-Asia/Taipei on weekdays, plus 00:30 and 06:30 Asia/Taipei Tuesday-Saturday. The first two
+Asia/Taipei on weekdays, plus 00:30 and 10:30 Asia/Taipei Tuesday-Saturday. The first two
 use `30 8` and `0 14` UTC weekdays; the midnight pass uses five weekday-specific
 cron entries from `30 16 * * 1` through `30 16 * * 5` UTC. Its cron identifies
 the scheduled Taipei weekday if GitHub starts that run after the next day's
-00:30 occurrence. A second set from `30 22 * * 1` through `30 22 * * 5` UTC
-provides the 06:30 Taipei confirmation after another publication window. Both
+00:30 occurrence. A second set from `30 2 * * 2` through `30 2 * * 6` UTC
+provides the 10:30 Taipei confirmation after the official publication window. Both
 overnight passes resolve the preceding TWSE trading date
 from the official TWSE holiday calendar, skipping weekends and listed market
 closures. If the calendar cannot be fetched or validated, the run stops before
@@ -17,7 +17,7 @@ collection or scoring instead of guessing. Existing source-date guards stop a ru
 that has no data for its requested date, before scoring. The workflow acknowledges
 the write internally and refreshes the score cutoff after all source collectors
 finish, so rows ingested by the same run are eligible for scoring. The 22:00,
-00:30, and 06:30 passes confirm delayed or revised official data. Issue #18
+00:30, and 10:30 passes confirm delayed or revised official data. Issue #18
 still has outstanding backup/restore, access-separation, secret-rotation, quota,
 and source-attribution work, so enabling this trigger is not approval for a final
 production release.
@@ -50,7 +50,7 @@ date. After source
 collection it refreshes the scheduled score cutoff to the current Taipei time;
 manual runs retain their explicit `as_of`. Both paths normalize `as_of` to
 `Asia/Taipei`, reject a target date after the Taiwan as-of date, and pass the same
-target date to the date-specific collectors. The 00:30 and 06:30 Asia/Taipei
+target date to the date-specific collectors. The 00:30 and 10:30 Asia/Taipei
 schedules target the preceding TWSE trading date, including Friday when the
 Saturday morning passes follow a weekend. A Taiwan market holiday is skipped using the
 official calendar; a delayed/unavailable source still fails its expected-date
@@ -122,7 +122,7 @@ so reruns should use the same explicit inputs after the cause is addressed.
 
 The scheduled automation intentionally skips the prior three-trading-day
 observation gate. The 16:30 pass is the first collection; the 22:00 pass repeats the same
-target-date collection. The 00:30 and 06:30 passes on the following Taipei date
+target-date collection. The 00:30 and 10:30 passes on the following Taipei date
 provide two more attempts for late or revised source data. The overnight targets
 use the official TWSE calendar; a missing or invalid calendar
 stops the run before any data writes. The

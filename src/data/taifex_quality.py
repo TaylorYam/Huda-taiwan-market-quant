@@ -176,6 +176,8 @@ def build_dataset_report(
         gate_reasons.append("unavailable or failed source status")
     if missing:
         gate_reasons.append("missing official calendar dates")
+    if unexpected:
+        gate_reasons.append("observed dates outside official calendar")
     if calendar["status"] != "available":
         gate_reasons.append("official trading calendar boundary is unknown")
     if (
@@ -192,7 +194,7 @@ def build_dataset_report(
 
     expected_count = len(expected_set) if expected_set is not None else None
     coverage_ratio = (
-        len(available_set) / expected_count
+        len(available_set & expected_set) / expected_count
         if expected_count is not None and expected_count > 0
         else None
     )

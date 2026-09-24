@@ -62,3 +62,14 @@ def test_audit_report_records_errors_without_filling_missing_dates():
     assert report["total_rows"] == 0
     assert report["error_window_count"] == 1
     assert report["duplicate_dates"] == []
+    assert report["observed_dates"] == []
+
+
+def test_audit_report_keeps_actual_dates_for_later_calendar_reconciliation():
+    report = audit_pcr_range(
+        date(2026, 9, 15), date(2026, 9, 17), lambda window: sample_payload()
+    )
+
+    assert report["error_window_count"] == 0
+    assert report["observed_dates"] == ["2026-09-15", "2026-09-16"]
+    assert report["unique_dates"] == 2

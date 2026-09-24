@@ -166,6 +166,9 @@ def audit_pcr_range(
         for observation_date, count in Counter(all_dates).items()
         if count > 1
     )
+    observed_dates = sorted(
+        observation_date.isoformat() for observation_date in set(all_dates)
+    )
     return {
         "audit_started_at": started_at,
         "requested_start": start.isoformat(),
@@ -174,7 +177,8 @@ def audit_pcr_range(
         "completed_window_count": len(planned) - len(errors),
         "error_window_count": len(errors),
         "total_rows": len(all_dates),
-        "unique_dates": len(set(all_dates)),
+        "unique_dates": len(observed_dates),
+        "observed_dates": observed_dates,
         "duplicate_dates": duplicate_dates,
         "min_data_date": min(all_dates).isoformat() if all_dates else None,
         "max_data_date": max(all_dates).isoformat() if all_dates else None,

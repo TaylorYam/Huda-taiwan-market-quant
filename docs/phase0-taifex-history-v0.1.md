@@ -34,7 +34,9 @@ UI 實測起訖相差 30 日的 `2026/08/17–2026/09/16` 可查；相差 31 日
 
 2026-09-17 以 [`taifex-pcr-window-audit.yml`](../.github/workflows/taifex-pcr-window-audit.yml) 執行 [`35184984406`](https://github.com/TaylorYam/Huda-taiwan-market-quant/actions/runs/35184984406)，查詢 `2001-12-24` 至 `2026-09-17`。報告顯示 292 個窗口全部完成，回傳 6,090 筆日列，日期集合也是 6,090 個，沒有跨窗口重複日期或查詢錯誤；最早日為 2001-12-24，最新日為 2026-09-16。這證明官方分段端點在本次執行中可重現，不等於每一個曆日都應有交易列，也不替代官方交易日曆缺日核對。
 
-本專案新增 `python -m scripts.audit_taifex_pcr` 作為只讀稽核工具。它依每段最多 30 日差、端點包含的規則建立不重疊窗口，使用官方 `pcRatioDown` POST，按 MS950／UTF-8 解碼，記錄每段欄位、列數、日期範圍、錯誤與全域重複日期，將 JSON 報告寫入指定檔案。工具不寫入 observation store，也不把非交易日補成 0；GitHub Actions 的 `taifex-pcr-window-audit.yml` 僅手動啟動並保存報告 artifact。完整稽核尚未執行前，仍不能宣稱 2001 年以來資料完整。
+本專案以 `python -m scripts.audit_taifex_pcr` 作為只讀稽核工具。它依每段最多 30 日差、端點包含的規則建立不重疊窗口，使用官方 `pcRatioDown` POST，按 MS950／UTF-8 解碼，記錄每段欄位、列數、日期範圍、錯誤與全域重複日期，將 JSON 報告寫入指定檔案。工具不寫入 observation store，也不把非交易日補成 0；GitHub Actions 的 `taifex-pcr-window-audit.yml` 僅手動啟動並保存報告 artifact。分段稽核已完成，但逐日交易日曆核對尚未完成，因此不能宣稱交易日覆蓋完整。
+
+新版稽核 JSON 額外保留排序後的 `observed_dates`，供 `python -m scripts.reconcile_taifex_pcr_audit --audit pcr-window-audit.json --calendar taifex-calendar.json --output pcr-calendar-reconciliation.json` 離線比對。舊版 2026-09-17 全期 artifact 只有筆數，沒有逐日日期清單，不能用它推導缺日；取得官方日曆後須重新產生新版稽核報告，或提供同等逐日原始證據。日曆檔必須是 JSON object，包含 `source`、`start_date`、`end_date`、`dates`，起訖須與稽核請求區間完全相同，`source` 須可供人工核對官方出處。若未提供日曆，可省略 `--calendar` 產出 `unknown` 報告；窗口錯誤、舊版計數報告、部分區間日曆均不能判為通過。`missing_dates` 與 `unexpected_dates` 只是待解釋的日期差集，不自行判斷休市原因，也不補 PCR=0。
 
 ## TX 年度行情 ZIP：年度範圍與全檔稽核
 

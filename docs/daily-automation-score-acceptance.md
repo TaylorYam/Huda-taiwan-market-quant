@@ -10,7 +10,8 @@ read path. It does not approve a production schedule or modify the collector.
 | --- | --- | --- |
 | `target_date` is explicit Taiwan market date | `run_daily_score` validates canonical `YYYY-MM-DD`, passes it to the reader and pipeline, and rejects a date after the Taipei date of `as_of`. | **Pass** |
 | `as_of` is explicit and point-in-time | Runner requires a timezone, normalizes equivalent offsets to `Asia/Taipei`, and filters retrieval, ingestion, and publication timestamps at or before that boundary. | **Pass** |
-| Missing data is persisted as unavailable | Empty or non-available source rows are excluded from factor inputs; the pipeline keeps per-factor unavailable states and the runner persists the envelope with null score/direction. | **Pass** |
+| Score-only replay can persist unavailable | Empty or non-available source rows are excluded from factor inputs; the point-in-time runner keeps per-factor unavailable states and, by default, persists the envelope with null score/direction. | **Pass** |
+| Integrated update requires an available score | The integrated workflow invokes the runner with `--require-available`; missing factors produce a nonzero result before the Market Score write. A blank manual cutoff is refreshed after collection; an explicit cutoff remains unchanged. | **Pass** |
 | Same calculation rerun is idempotent | Persistence identity includes `model_version`, `target_date`, and `calculation_hash`; the REST writer returns `duplicate` for an existing identity. Equivalent `as_of` offsets therefore deduplicate. | **Pass** |
 | Known later source revision is retained | A revision with changed source evidence and a retrieval timestamp inside the boundary changes the calculation hash and is inserted as a new score row. A future revision is excluded. | **Pass** |
 | Dashboard can show the newest persisted result | `DashboardDataStore.get_latest_market_score()` reads `/market_scores` ordered by `target_date.desc,created_at.desc,id.desc` and includes unavailable rows instead of falling back to an older available score. | **Pass** |
@@ -39,9 +40,10 @@ quota, and source-term evidence remain release gates in Issue #18.
 
 ## Minimal follow-up if scheduling is enabled
 
-Keep the workflow inputs explicit: every invocation must provide both
-`target_date` and `as_of`; do not infer either from the latest observation.
-Serialize invocations for one target/model, retain a failed run as an error,
-and alert when no `market_scores` row is produced. A successful run may still
-have `status=unavailable`; that state is a persisted data-quality result and
-must remain visible in the dashboard.
+Keep `target_date` explicit. The integrated workflow may use an automatic
+post-collection `as_of` or preserve an intentionally supplied point-in-time
+cutoff; it never infers the market date from the latest observation. Serialize
+invocations for one target/model and retain a failed run as an error. A green
+integrated run must have persisted an available score. The separate score-only
+replay may still persist `status=unavailable` for data-quality diagnosis, and
+that state remains visible in the dashboard.

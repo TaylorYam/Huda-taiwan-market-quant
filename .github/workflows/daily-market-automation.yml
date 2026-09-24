@@ -10,8 +10,8 @@ on:
         required: true
         type: string
       as_of:
-        description: Information cutoff with timezone (for example, 2026-09-17T20:00:00+08:00)
-        required: true
+        description: Optional fixed cutoff with timezone; leave blank to use collection completion time
+        required: false
         type: string
       confirm_write:
         description: Confirm that this run may write observations and Market Score
@@ -89,6 +89,11 @@ jobs:
             export REQUESTED_AS_OF="$(TZ=Asia/Taipei date --iso-8601=seconds)"
             export CONFIRM_WRITE=true
             echo "Scheduled run: schedule=$SCHEDULE_CRON target_date=$REQUESTED_TARGET_DATE as_of=$REQUESTED_AS_OF"
+          elif [[ -z "${REQUESTED_AS_OF:-}" ]]; then
+            # The integrated manual run should include rows collected by this
+            # job. This initial cutoff is only for target-date validation.
+            export REQUESTED_AS_OF="$(TZ=Asia/Taipei date --iso-8601=seconds)"
+            echo "Manual live collection: score cutoff will be set after source collection"
           fi
           if [[ "${CONFIRM_WRITE:-false}" != "true" ]]; then
             echo "::error::Set confirm_write=true to authorize this supervised write run."
@@ -251,26 +256,49 @@ jobs:
             echo "- result: completed"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Refresh scheduled score cutoff after collection
-        if: ${{ github.event_name == 'schedule' }}
+      - name: Refresh automatic score cutoff after collection
         shell: bash
         run: |
           # Source rows are ingested during this job. The score boundary must
-          # include those rows while manual runs retain their explicit as-of.
-          AS_OF_TAIPEI="$(TZ=Asia/Taipei date --iso-8601=seconds)"
-          echo "AS_OF_TAIPEI=$AS_OF_TAIPEI" >> "$GITHUB_ENV"
-          echo "Scheduled score cutoff refreshed after source collection: $AS_OF_TAIPEI"
+          # include those rows. Explicit manual cutoffs remain point-in-time.
+          if [[ "${GITHUB_EVENT_NAME:-}" == "schedule" || -z "${REQUESTED_AS_OF:-}" ]]; then
+            AS_OF_TAIPEI="$(python -c 'from datetime import datetime; from zoneinfo import ZoneInfo; print(datetime.now(ZoneInfo("Asia/Taipei")).isoformat(timespec="microseconds"))')"
+            echo "AS_OF_TAIPEI=$AS_OF_TAIPEI" >> "$GITHUB_ENV"
+            echo "Score cutoff refreshed after source collection: $AS_OF_TAIPEI"
+          else
+            echo "Preserving explicit manual score cutoff: $AS_OF_TAIPEI"
+          fi
 
       - name: Calculate and persist Market Score
         shell: bash
         run: |
           echo "Market Score (target_date=$TARGET_DATE, as_of=$AS_OF_TAIPEI)" > "$RUNNER_TEMP/daily-market-automation-stage.txt"
-          python -m src.scoring.daily_runner --target-date "$TARGET_DATE" --as-of "$AS_OF_TAIPEI"
+          score_log="$RUNNER_TEMP/daily-market-score.log"
+          score_status="$RUNNER_TEMP/daily-market-score-status.txt"
+          if ! python -m src.scoring.daily_runner --target-date "$TARGET_DATE" --as-of "$AS_OF_TAIPEI" --require-available > "$score_log" 2>&1; then
+            if grep -q '^Market Score unavailable:' "$score_log"; then
+              echo "unavailable" > "$score_status"
+              reason="$(grep -m 1 '^Market Score unavailable:' "$score_log")"
+              echo "$reason"
+              {
+                echo "### Market Score unavailable"
+                echo "- target_date: \`$TARGET_DATE\`"
+                echo "- as_of (Asia/Taipei): \`$AS_OF_TAIPEI\`"
+                echo "- reason: \`$reason\`"
+              } >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "scoring_error" > "$score_status"
+              cat "$score_log"
+            fi
+            exit 1
+          fi
+          cat "$score_log"
+          echo "available" > "$score_status"
           {
             echo "### Market Score"
             echo "- target_date: \`$TARGET_DATE\`"
             echo "- as_of (Asia/Taipei): \`$AS_OF_TAIPEI\`"
-            echo "- result: calculated and persisted"
+            echo "- result: available and persisted"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish successful run summary
@@ -283,7 +311,7 @@ jobs:
             echo "- target_date (Asia/Taipei): \`${TARGET_DATE}\`"
             echo "- as_of (Asia/Taipei): \`${AS_OF_TAIPEI}\`"
             echo "- source collection: completed"
-            echo "- Market Score: calculated and persisted"
+            echo "- Market Score: available and persisted"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish failure summary
@@ -302,7 +330,12 @@ jobs:
             echo "- failed or interrupted stage: \`$failed_stage\`"
             echo "- source collection and scoring run sequentially; later steps were skipped after the first failure"
             if [[ "$failed_stage" == "Market Score ("* ]]; then
-              echo "- Market Score: scoring started but failed; inspect that step to confirm persistence status"
+              score_status="$(cat "$RUNNER_TEMP/daily-market-score-status.txt" 2>/dev/null || true)"
+              if [[ "$score_status" == "unavailable" ]]; then
+                echo "- Market Score: unavailable; missing required factors were rejected before persistence"
+              else
+                echo "- Market Score: scoring or persistence error; no available result was confirmed"
+              fi
             else
               echo "- Market Score: not run because input validation or an earlier required source failed"
             fi

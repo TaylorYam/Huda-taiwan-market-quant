@@ -16,7 +16,8 @@ closures. If the calendar cannot be fetched or validated, the run stops before
 collection or scoring instead of guessing. Existing source-date guards stop a run
 that has no data for its requested date, before scoring. The workflow acknowledges
 the write internally and refreshes the score cutoff after all source collectors
-finish, so rows ingested by the same run are eligible for scoring. The 22:00,
+finish, so rows ingested by the same run are eligible for scoring. A manual
+integrated run with a blank `as_of` uses the same post-collection cutoff. The 22:00,
 00:30, and 10:30 passes confirm delayed or revised official data. Issue #18
 still has outstanding backup/restore, access-separation, secret-rotation, quota,
 and source-attribution work, so enabling this trigger is not approval for a final
@@ -37,8 +38,10 @@ For a manual run, an operator starts **Actions → Daily market automation
 (supervised) → Run workflow** with:
 
 - `target_date`: the explicit Taiwan market date in canonical `YYYY-MM-DD` form;
-- `as_of`: an ISO-8601 timestamp with a timezone, normally entered in
-  `Asia/Taipei` (for example, `2026-09-17T20:00:00+08:00`); and
+- `as_of`: optional. Leave blank for a live rerun so the cutoff is captured
+  after all sources have been collected. Supply an ISO-8601 timestamp with a
+  timezone only for an intentional point-in-time calculation (for example,
+  `2026-09-17T20:00:00+08:00`); and
 - `confirm_write=true`, an explicit acknowledgement that the run may write source
   observations and the derived Market Score.
 
@@ -47,8 +50,9 @@ then sets an initial timezone-aware `as_of` for input validation. For the
 overnight confirmations, the day-specific cron preserves the originating local
 weekday across a delay, while the TWSE calendar resolves the previous trading
 date. After source
-collection it refreshes the scheduled score cutoff to the current Taipei time;
-manual runs retain their explicit `as_of`. Both paths normalize `as_of` to
+collection it refreshes the score cutoff to the current Taipei time for
+scheduled and blank-cutoff manual runs. An explicitly supplied manual `as_of`
+is never silently changed. Both paths normalize `as_of` to
 `Asia/Taipei`, reject a target date after the Taiwan as-of date, and pass the same
 target date to the date-specific collectors. The 00:30 and 10:30 Asia/Taipei
 schedules target the preceding TWSE trading date, including Friday when the
@@ -78,9 +82,12 @@ collection:
 7. TAIFEX foreign TX open-interest latest snapshot
 8. `src.scoring.daily_runner` with the normalized target/as-of window
 
-The score runner reads all seven supported datasets, applies its point-in-time
-filters using the refreshed scheduled cutoff, and persists an available or
-explicitly unavailable result. It does not create or alter the Supabase schema.
+The score runner reads all seven supported datasets and applies its point-in-time
+filters using the selected cutoff. This integrated workflow requires all eight
+factors to be available: an unavailable result exits nonzero before writing a
+Market Score row, and the failed step names the missing factor IDs. The separate
+manual score-only workflow still supports persisting unavailable point-in-time
+results for diagnosis. Neither workflow creates or alters the Supabase schema.
 
 ## Known v0.1 limits
 
@@ -113,10 +120,14 @@ last stage that started as well as the requested input window. A failed collecto
 does not append its completion section, and the score step is skipped.
 
 The failure summary does not include credentials, source payloads, or raw transport
-errors. The failed step's log is the place to inspect the bounded error from that
-collector or the score CLI; source scripts and the score CLI retain their existing
-secret-safe error boundaries. Earlier successful source writes may remain durable,
-so reruns should use the same explicit inputs after the cause is addressed.
+errors. It distinguishes a missing-factor score from a scoring or persistence
+error; the unavailable section lists the missing factor IDs and confirms that no
+Market Score row was written. The failed step's log is the place to inspect the
+bounded error from that collector or the score CLI. Earlier successful source
+writes may remain durable,
+so reruns should use the same target date after the cause is addressed. For a live
+manual rerun, leave `as_of` blank; for a fixed point-in-time replay, check that
+the specified cutoff includes the intended source publication and ingestion times.
 
 ## Schedule operation
 

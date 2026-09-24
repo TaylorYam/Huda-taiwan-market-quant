@@ -3,15 +3,32 @@ from pathlib import Path
 WORKFLOW = Path(".github/workflows/daily-market-automation.yml")
 
 
-def test_scheduled_score_cutoff_refreshes_after_all_source_steps() -> None:
+def test_automatic_score_cutoff_refreshes_after_all_source_steps() -> None:
     text = WORKFLOW.read_text(encoding="utf-8")
-    refresh_marker = "name: Refresh scheduled score cutoff after collection"
+    refresh_marker = "name: Refresh automatic score cutoff after collection"
     score_marker = "name: Calculate and persist Market Score"
 
     assert refresh_marker in text
     assert text.index(refresh_marker) < text.index(score_marker)
-    assert "if: ${{ github.event_name == 'schedule' }}" in text
+    assert '"${GITHUB_EVENT_NAME:-}" == "schedule" || -z "${REQUESTED_AS_OF:-}"' in text
     assert 'echo "AS_OF_TAIPEI=$AS_OF_TAIPEI" >> "$GITHUB_ENV"' in text
+    assert 'isoformat(timespec="microseconds")' in text
+    assert 'echo "Preserving explicit manual score cutoff: $AS_OF_TAIPEI"' in text
+
+
+def test_manual_live_run_can_omit_cutoff_and_unavailable_score_fails() -> None:
+    text = WORKFLOW.read_text(encoding="utf-8")
+    as_of_input = text.split("      as_of:\n", 1)[1].split("      confirm_write:", 1)[0]
+    score_step = text.split("      - name: Calculate and persist Market Score", 1)[1]
+
+    assert "required: false" in as_of_input
+    assert 'elif [[ -z "${REQUESTED_AS_OF:-}" ]]; then' in text
+    assert "score cutoff will be set after source collection" in text
+    assert "--require-available" in score_step
+    assert "- Market Score: available and persisted" in score_step
+    assert "missing required factors were rejected before persistence" in score_step
+    assert 'echo "unavailable" > "$score_status"' in score_step
+    assert 'echo "scoring_error" > "$score_status"' in score_step
 
 
 def test_workflow_has_taipei_midnight_confirmation_and_preserves_guards() -> None:
